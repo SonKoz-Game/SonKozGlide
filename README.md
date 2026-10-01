@@ -43,6 +43,59 @@ Discord, Roblox, OpenAI, Telegram, YouTube ve Meta (Instagram, WhatsApp).
 
 Gereksinimler: Windows 10/11, 64 bit.
 
+## Windows uyarısı ve güvenlik
+
+İlk çalıştırmada Windows **"Windows kişisel bilgisayarınızı korudu"** uyarısı
+gösterebilir. Bu uyarı Microsoft Defender SmartScreen'den gelir ve dosyanın
+ücretli bir kod imzalama sertifikasıyla imzalanmadığını, ayrıca yeni bir dosya
+olarak henüz yeterli indirme geçmişi olmadığını belirtir. Zararlı yazılım tespiti
+değildir. Devam etmek için **Ek bilgi → Yine de çalıştır**'a tıklayın.
+Uygulama içinden yapılan güncellemelerde bu uyarı tekrar çıkmaz.
+
+Dosyaya körü körüne güvenmek zorunda değilsiniz:
+
+- **Kaynak açık:** Uygulamanın tüm kodu bu depodadır.
+- **GitHub derliyor:** Release dosyaları bir bilgisayarda elle değil,
+  [release iş akışı](.github/workflows/release.yml) tarafından etiketlenmiş
+  koddan derlenir.
+- **Özet kontrolü:** Her release'teki `checksums.txt`, dosyaların SHA-256
+  özetlerini içerir. Uygulama içi güncelleme indirdiği dosyayı bu özetle
+  doğrular, uyuşmazsa kurmaz. Elle kontrol etmek için:
+
+  ```powershell
+  Get-FileHash .\SonKozGlide_windows_amd64.exe -Algorithm SHA256
+  ```
+
+- **Derleme kanıtı:** Release dosyaları GitHub tarafından imzalanmış bir
+  derleme kanıtı (build provenance attestation) taşır. Dosyanın bu depodaki
+  koddan, GitHub Actions'ta derlendiğini [GitHub CLI](https://cli.github.com/)
+  ile doğrulayabilirsiniz:
+
+  ```bash
+  gh attestation verify SonKozGlide_windows_amd64.exe -R SonKoz-Game/SonKozGlide
+  ```
+
+**Antivirüs uyarıları:** Bazı antivirüs programları WinDivert sürücüsünü
+"HackTool" veya "PUA" (istenmeyebilecek uygulama) olarak işaretleyebilir. Bu
+kategori, ağ paketlerini değiştirebilen araçlar için kullanılır; WinDivert,
+GoodbyeDPI ve zapret gibi açık kaynak araçların da kullandığı sürücüdür.
+
+**Uygulamanın sisteminizde yaptıkları:** Bağlantı açıkken `winws.exe`
+çalıştırılır. İsteğe bağlı olarak DNS sunucuları şifreli DNS'e (Cloudflare,
+Google) ve TCP/MTU ayarları düzeltilmiş değerlere çevrilir. Bağlantı
+kapatıldığında önceki ayarlar geri yüklenir. Uygulama telemetri veya kişisel
+veri toplamaz; ayarlar ve kayıtlar yalnızca bilgisayarınızda tutulur.
+
+Uygulamanın kendi açtığı ağ bağlantıları:
+
+- Erişim kontrolü için Discord, Roblox ve ödeme servislerine (Stripe, PayPal,
+  hCaptcha, Arkose) TLS el sıkışmaları; veri gönderilmez.
+- İnternetin açık olup olmadığını anlamak için Google, Microsoft ve Cloudflare'e
+  TLS el sıkışmaları.
+- Cloudflare (`1.1.1.1`) ve Google (`8.8.8.8`) üzerinden DNS sorguları ve MTU
+  ölçümü için bu adreslere ping.
+- GitHub üzerinden sürüm kontrolü ve güncelleme indirme.
+
 ## Geliştirme
 
 Gerekenler: [Go 1.26+](https://go.dev/dl/), [Node.js 22+](https://nodejs.org/),

@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -52,8 +54,12 @@ jobs:
           }
           [System.IO.File]::WriteAllText("$PWD/dist/checksums.txt", ($lines -join "`n") + "`n")
 
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: dist/checksums.txt
+
       - name: Publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" (Get-ChildItem dist -File).FullName --title "SonKoz Glide ${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" (Get-ChildItem dist -File).FullName --title "SonKoz Glide ${{ github.ref_name }}" --notes-file .github/release-notes.md --generate-notes
