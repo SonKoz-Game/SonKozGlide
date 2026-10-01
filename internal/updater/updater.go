@@ -11,6 +11,7 @@ import (
 const (
 	fallbackVersion = "v0.0.0-dev"
 	RepoSlug        = "SonKoz-Game/SonKozGlide"
+	ChecksumsAsset  = "checksums.txt"
 )
 
 var Version = fallbackVersion
@@ -31,7 +32,10 @@ func newUpdater() (*selfupdate.Updater, error) {
 	if err != nil {
 		return nil, err
 	}
-	return selfupdate.NewUpdater(selfupdate.Config{Source: source})
+	return selfupdate.NewUpdater(selfupdate.Config{
+		Source:    source,
+		Validator: &selfupdate.ChecksumValidator{UniqueFilename: ChecksumsAsset},
+	})
 }
 
 func Check() (*selfupdate.Release, error) {

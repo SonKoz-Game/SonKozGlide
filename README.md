@@ -35,7 +35,9 @@ Discord, Roblox, OpenAI, Telegram, YouTube ve Meta (Instagram, WhatsApp).
 ## Kullanım
 
 1. [Releases](https://github.com/SonKoz-Game/SonKozGlide/releases) sayfasından
-   `SonKozGlide.exe` dosyasını indirin.
+   `SonKozGlide_windows_amd64.exe` dosyasını indirin. Her release'te SHA-256
+   özetleri `checksums.txt` içinde yer alır; uygulama içi güncelleme de bu
+   dosyayla doğrulanır.
 2. Çalıştırın (WinDivert sürücüsü için yönetici izni gerekir).
 3. Güç düğmesine basın. Glide hattınıza uygun modu ölçer ve bağlantıyı açar.
 
@@ -74,6 +76,22 @@ build.bat 1.2.0
 
 Ağ özellikleri (WinDivert, DNS, MTU) yönetici izni gerektirir; geliştirme
 sırasında uygulamayı yönetici olarak başlatın.
+
+### Sürüm yayınlamak
+
+1. `build.bat 1.3.0` veya `scripts/version.ps1 -Set 1.3.0` ile `wails.json`
+   içindeki sürümü güncelleyip commit edin.
+2. Aynı sürümle etiket oluşturup gönderin:
+
+   ```bash
+   git tag v1.3.0 && git push origin v1.3.0
+   ```
+
+[Release iş akışı](.github/workflows/release.yml) etiketi `wails.json` ile
+karşılaştırır, testleri çalıştırır, EXE'yi derler ve release'e
+`SonKozGlide_windows_amd64.exe`, `checksums.txt` ve `licenses.zip` dosyalarını
+ekler. Güncelleyici yalnızca `windows_amd64.exe` ile biten dosyaları tanır; dosya
+adını değiştirmeyin.
 
 ### Proje yapısı
 
