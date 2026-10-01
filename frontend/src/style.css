@@ -152,7 +152,12 @@ body {
 .support-btn,
 .fa-xmark,
 .fa-circle-info,
-.fa-circle-exclamation {
+.fa-circle-exclamation,
+.fa-trash-can,
+.fa-plug-circle-xmark,
+.fa-microchip,
+.fa-folder-minus,
+.fa-file-circle-xmark {
     font-family: var(--font-icons) !important;
     font-weight: 900;
     font-style: normal;
@@ -174,6 +179,11 @@ body {
 .fa-xmark:before { content: "\f00d"; }
 .fa-circle-info:before { content: "\f05a"; }
 .fa-circle-exclamation:before { content: "\f06a"; }
+.fa-trash-can:before { content: "\f2ed"; }
+.fa-plug-circle-xmark:before { content: "\e560"; }
+.fa-microchip:before { content: "\f2db"; }
+.fa-folder-minus:before { content: "\f65d"; }
+.fa-file-circle-xmark:before { content: "\e5a1"; }
 
 .icon-btn:hover,
 .icon-btn.is-active {
@@ -601,7 +611,8 @@ body[data-conn="busy"] .ambient-glow {
 }
 
 .settings-panel.is-open .setting-item,
-.settings-panel.is-open .settings-close {
+.settings-panel.is-open .settings-close,
+.settings-panel.is-open .settings-uninstall {
     animation: rise-in 0.36s var(--ease-out) both;
 }
 
@@ -612,6 +623,7 @@ body[data-conn="busy"] .ambient-glow {
 .settings-panel.is-open .setting-item:nth-of-type(5) { animation-delay: 130ms; }
 .settings-panel.is-open .setting-item:nth-of-type(6) { animation-delay: 155ms; }
 .settings-panel.is-open .settings-close { animation-delay: 180ms; }
+.settings-panel.is-open .settings-uninstall { animation-delay: 205ms; }
 
 .settings-title {
     margin-bottom: 16px;
@@ -703,6 +715,35 @@ body[data-conn="busy"] .ambient-glow {
 
 .settings-close:focus-visible {
     box-shadow: 0 0 0 3px rgba(40, 209, 124, 0.35);
+}
+
+.settings-uninstall {
+    width: 100%;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.settings-uninstall i {
+    font-size: 0.74rem;
+}
+
+.settings-uninstall:hover {
+    background: rgba(239, 98, 98, 0.08);
+    color: var(--danger);
+}
+
+.settings-uninstall:focus-visible {
+    box-shadow: 0 0 0 3px rgba(239, 98, 98, 0.3);
+    color: var(--danger);
 }
 
 .btn-label {
@@ -830,6 +871,134 @@ body[data-conn="busy"] .ambient-glow {
 .support-viewer.is-open {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
+}
+
+.confirm-dialog {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(88%, 330px);
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
+    z-index: 1000;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(18, 24, 33, 0.98);
+    box-shadow: 0 24px 52px rgba(0, 0, 0, 0.52);
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+    transition: opacity 0.22s ease, transform 0.34s var(--ease-emph);
+}
+
+.confirm-dialog.is-open {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.confirm-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.confirm-icon {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: rgba(239, 98, 98, 0.12);
+    color: var(--danger);
+    font-size: 0.95rem;
+}
+
+.confirm-title {
+    color: var(--text);
+    font-weight: 700;
+    font-size: 0.98rem;
+}
+
+.confirm-text {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.confirm-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--surface-soft);
+}
+
+.confirm-list li {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 10px;
+    color: var(--text);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.confirm-list i {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+.confirm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.confirm-cancel,
+.confirm-danger {
+    height: 40px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    transition: filter 0.18s ease, transform 0.18s ease, background-color 0.18s ease, box-shadow 0.25s ease;
+}
+
+.confirm-cancel {
+    background: var(--surface-raised);
+    color: var(--text);
+}
+
+.confirm-cancel:hover {
+    background: #253042;
+}
+
+.confirm-danger {
+    background: var(--danger);
+    color: #1a0606;
+}
+
+.confirm-danger:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 8px 22px rgba(239, 98, 98, 0.24);
+}
+
+.confirm-cancel:active,
+.confirm-danger:active {
+    transform: scale(0.98);
+}
+
+.confirm-cancel:focus-visible {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+.confirm-danger:focus-visible {
+    box-shadow: 0 0 0 3px rgba(239, 98, 98, 0.35);
 }
 
 .support-header {
@@ -973,8 +1142,11 @@ body[data-conn="busy"] .ambient-glow {
 }
 
 .update-action-btn {
+    --p: 0;
+    position: relative;
+    overflow: hidden;
+    width: min(100%, 290px);
     min-height: 40px;
-    max-width: 290px;
     margin-top: -4px;
     display: flex;
     align-items: center;
@@ -987,7 +1159,7 @@ body[data-conn="busy"] .ambient-glow {
     font-weight: 700;
     font-size: 0.84rem;
     line-height: 1.25;
-    transition: background-color 0.2s ease, transform 0.18s ease, opacity 0.2s ease;
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease, filter 0.18s ease, transform 0.18s ease;
 }
 
 .update-action-btn[hidden] {
@@ -1008,7 +1180,47 @@ body[data-conn="busy"] .ambient-glow {
 
 .update-action-btn:disabled {
     cursor: progress;
-    opacity: 0.7;
+}
+
+.update-fill {
+    position: absolute;
+    inset: 0;
+    background: rgba(246, 183, 60, 0.26);
+    transform: scaleX(var(--p));
+    transform-origin: left center;
+    transition: transform 0.25s linear, background-color 0.3s ease;
+}
+
+.update-label {
+    position: relative;
+    font-variant-numeric: tabular-nums;
+}
+
+.update-action-btn[data-state="install"] .update-fill,
+.update-action-btn[data-state="restarting"] .update-fill {
+    animation: update-pulse 1.1s ease-in-out infinite;
+}
+
+.update-action-btn[data-state="ready"],
+.update-action-btn[data-state="restarting"] {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #07110c;
+}
+
+.update-action-btn[data-state="ready"] .update-fill,
+.update-action-btn[data-state="restarting"] .update-fill {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.update-action-btn[data-state="ready"]:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 8px 22px rgba(40, 209, 124, 0.22);
+}
+
+@keyframes update-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
 }
 
 @keyframes pop-in {
@@ -1601,7 +1813,7 @@ body[data-conn="busy"] .ambient-glow {
 
 .services-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
     margin-bottom: 8px;
 }

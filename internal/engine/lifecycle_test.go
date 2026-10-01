@@ -47,7 +47,7 @@ func installOpRecorder(t *testing.T, rec *opRecorder) {
 		startFn, haltFn, restoreFn = oldStart, oldHalt, oldRestore
 
 		opMu.Lock()
-		opDesired, opRestart, opWorking = false, false, false
+		opDesired, opRestart, opWorking, opClosed = false, false, false, false
 		opMu.Unlock()
 
 		mu.Lock()
@@ -176,6 +176,51 @@ func TestStopFollowedByStartSkipsTheRestoreChurn(t *testing.T) {
 	}
 	if calls[len(calls)-1] != "start" {
 		t.Fatalf("expected the pending start to run, got %v", calls)
+	}
+}
+
+func TestShutdownStopsAndRefusesLaterStarts(t *testing.T) {
+	rec := &opRecorder{block: make(chan struct{})}
+	installOpRecorder(t, rec)
+
+	RequestStart()
+	waitForCalls(t, rec, []string{"start"})
+
+	stopped := make(chan bool, 1)
+	go func() { stopped <- Shutdown(2 * time.Second) }()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		opMu.Lock()
+		closed := opClosed
+		opMu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("shutdown did not close the lifecycle")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	RequestStart()
+
+	rec.mu.Lock()
+	close(rec.block)
+	rec.block = nil
+	rec.mu.Unlock()
+
+	if !<-stopped {
+		t.Fatal("shutdown timed out")
+	}
+	waitForCalls(t, rec, []string{"start", "stop", "restore"})
+
+	RequestStart()
+	waitForIdleWorker(t)
+	if calls := rec.snapshot(); len(calls) != 3 {
+		t.Fatalf("an uninstall must not be able to relaunch winws, got %v", calls)
+	}
+	if State().Phase != PhaseIdle {
+		t.Fatalf("expected idle after shutdown, got %q", State().Phase)
 	}
 }
 

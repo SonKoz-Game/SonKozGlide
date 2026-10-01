@@ -4,8 +4,10 @@ import (
 	"embed"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 
+	"github.com/SonKoz-Game/SonKozGlide/internal/instance"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -21,40 +23,36 @@ var rulesYAML []byte
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const windowTitle = "SonKoz Glide"
+const (
+	windowTitle       = "SonKoz Glide"
+	instanceMutexName = "SonKozGlide_SingleInstance_Mutex"
+	restartFlag       = "-restart"
+	reconnectFlag     = "-connect"
+	restartWait       = 30 * time.Second
+)
 
 func main() {
-	mutexName := "SonKozGlide_SingleInstance_Mutex"
-	uint16MutexName, _ := syscall.UTF16PtrFromString(mutexName)
-	handle, err := windows.CreateMutex(nil, true, uint16MutexName)
-	if err == windows.ERROR_ALREADY_EXISTS {
+	wait := time.Duration(0)
+	if hasArg(restartFlag) {
+		wait = restartWait
+	}
+	handle, ok := instance.Acquire(instanceMutexName, wait)
+	if !ok {
 		focusExistingWindow()
-		if handle != 0 {
-			_ = windows.CloseHandle(handle)
-		}
 		os.Exit(0)
 	}
-	if handle != 0 {
-		defer windows.CloseHandle(handle)
-	}
+	defer windows.CloseHandle(handle)
 
 	app := NewApp(embeddedFiles, rulesYAML)
+	app.reconnect = hasArg(reconnectFlag)
 
-	startHidden := false
-	for _, arg := range os.Args {
-		if arg == "-hide" || arg == "-startup" {
-			startHidden = true
-			break
-		}
-	}
-
-	err = wails.Run(&options.App{
+	err := wails.Run(&options.App{
 		Title:             windowTitle,
 		Width:             380,
 		Height:            600,
 		DisableResize:     true,
 		HideWindowOnClose: true,
-		StartHidden:       startHidden,
+		StartHidden:       hasArg("-hide") || hasArg("-startup"),
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -68,6 +66,15 @@ func main() {
 	if err != nil {
 		println("Error:", err.Error())
 	}
+}
+
+func hasArg(name string) bool {
+	for _, arg := range os.Args[1:] {
+		if arg == name {
+			return true
+		}
+	}
+	return false
 }
 
 func focusExistingWindow() {

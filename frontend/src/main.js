@@ -13,7 +13,10 @@ import {
     GetBootReport,
     GetConnectTrace,
     RunServiceCheck,
-    InstallUpdate
+    InstallUpdate,
+    RestartApp,
+    Uninstall,
+    FinishUninstall
 } from '../wailsjs/go/main/App';
 
 import { EventsOn } from '../wailsjs/runtime/runtime';
@@ -29,6 +32,7 @@ const TRACE_MAX_WAIT_MS = 1600;
 const TRACE_COLLAPSE_MS = 2600;
 const TRACE_EXPANDED_TOP = 40;
 const BOOT_FAILSAFE_MS = 7000;
+const UNINSTALL_CLOSE_MS = 2400;
 
 const STRATEGY_NAMES = {
     'md5-disorder': 'Kalkan · karışık',
@@ -46,9 +50,89 @@ const STRATEGY_NAMES = {
 
 const SERVICE_META = {
     discord: { name: 'Discord', idle: 'sohbet · medya' },
-    roblox: { name: 'Roblox', idle: 'oyun · API' },
-    payments: { name: 'Ödeme', idle: 'Nitro · Robux' }
+    roblox: { name: 'Roblox', idle: 'oyun · API' }
 };
+
+const UNINSTALL_STEPS = {
+    connection: {
+        active: 'Bağlantı kapatılıyor', done: 'Bağlantı kapatıldı', skipped: 'Bağlantı zaten kapalı',
+        ticker: 'winws.exe · süreç sonlandırılıyor'
+    },
+    network: {
+        active: 'Ağ ayarları geri yükleniyor', done: 'Ağ ayarları geri yüklendi', skipped: 'Ağ ayarları değişmemiş',
+        ticker: 'dns_backup.json · net_tuning.json okunuyor'
+    },
+    autostart: {
+        active: 'Başlangıç görevi siliniyor', done: 'Başlangıç görevi silindi', skipped: 'Başlangıç görevi yok',
+        warn: 'Başlangıç görevi silinemedi',
+        ticker: 'Görev Zamanlayıcı · SonKozGlide'
+    },
+    driver: {
+        active: 'Ağ sürücüsü kaldırılıyor', done: 'Ağ sürücüsü kaldırıldı', skipped: 'Ağ sürücüsü kayıtlı değil',
+        'skipped:foreign': 'Ağ sürücüsüne dokunulmadı', 'warn:inuse': 'Ağ sürücüsü durdurulamadı',
+        warn: 'Ağ sürücüsü kaldırılamadı',
+        ticker: 'WinDivert · hizmet durduruluyor'
+    },
+    files: {
+        active: 'Bileşenler siliniyor', done: 'Bileşenler silindi', skipped: 'Bileşen bulunamadı',
+        ticker: 'C:\\ProgramData\\SonKozGlide'
+    },
+    data: {
+        active: 'Ayarlar ve kayıtlar siliniyor', done: 'Ayarlar ve kayıtlar silindi', skipped: 'Kayıtlı ayar yok',
+        warn: 'Bazı kayıtlar silinemedi',
+        ticker: '%USERPROFILE%\\.sonkoz · WebView2 profili'
+    },
+    app: {
+        active: 'Uygulama dosyası hazırlanıyor', done: 'Uygulama dosyası silinecek', failed: 'Uygulama dosyası silinemedi',
+        ticker: 'çıkışta silinecek dosyalar işaretleniyor'
+    }
+};
+
+function describeUninstall(event) {
+    const text = UNINSTALL_STEPS[event.step];
+    const items = event.items || [];
+    const title = text[event.state + ':' + event.reason] || text[event.state] || text.done;
+    let detail = '';
+
+    switch (event.step) {
+    case 'connection':
+        if (event.state === 'done') {
+            detail = items.length > 1 ? `${items.length} süreç durduruldu` : `${items[0] || 'winws'} durduruldu`;
+        }
+        break;
+    case 'network':
+        detail = event.state === 'done'
+            ? items.map(item => ({ dns: 'DNS', tuning: 'TCP · MTU' })[item]).join(' · ')
+            : '';
+        break;
+    case 'autostart':
+        detail = { done: 'Görev Zamanlayıcı', warn: 'elle silin' }[event.state] || '';
+        break;
+    case 'driver':
+        if (event.state === 'skipped') {
+            detail = event.reason === 'foreign' ? 'başka uygulamanın' : '';
+        } else if (items.length) {
+            detail = items.length > 1 ? `${items.length} uygulama kapatıldı` : `${items[0]} kapatıldı`;
+        } else if (event.state === 'done') {
+            detail = 'WinDivert';
+        }
+        break;
+    case 'files':
+        if (event.pending) {
+            detail = `${event.pending} dosya kapanınca`;
+        } else if (event.files) {
+            detail = `${event.files} dosya · ${formatBytes(event.bytes)}`;
+        }
+        break;
+    case 'data':
+        detail = items.map(item => ({ settings: 'ayarlar', webview: 'önbellek' })[item]).join(' · ');
+        break;
+    case 'app':
+        detail = event.state === 'done' ? 'kapanınca' : 'elle silin';
+        break;
+    }
+    return { title, detail };
+}
 
 const STEP_ICON = `
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -118,9 +202,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorClose = byId('error-close');
     const toastTimer = byId('toast-timer');
     const updateCard = byId('update-card');
+    const updateLabel = byId('update-label');
     const supportBtn = byId('support-btn');
     const servicesGrid = byId('services-grid');
     const servicesRefresh = byId('services-refresh');
+    const uninstallBtn = byId('uninstall-btn');
+    const uninstallScrim = byId('uninstall-scrim');
+    const uninstallDialog = byId('uninstall-dialog');
+    const uninstallCancel = byId('uninstall-cancel');
+    const uninstallConfirm = byId('uninstall-confirm');
 
     const statusPollMs = 5000;
     const supportPollMs = 1800;
@@ -133,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let booting = true;
     let serviceResults = {};
     let servicesBusy = false;
+    let uninstalling = false;
 
     const PHASE_TEXT = {
         idle: {
@@ -249,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
         rows: new Map(),
         ready: null,
         strategy: null,
-        services: {},
         collapseTimer: null
     };
 
@@ -289,7 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
         trace.list.classList.remove('is-overflowing');
         trace.ready = null;
         trace.strategy = null;
-        trace.services = {};
         trace.lastRevealAt = 0;
         if (lastPhase !== 'idle') setTraceView('live');
         fitTrace();
@@ -380,12 +469,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             case 'service': {
                 const meta = SERVICE_META[event.detail] || { name: event.detail };
-                if (event.detail === 'payments') {
-                    if (event.state === 'active') return { state: 'active', title: 'Ödeme servisleri kontrol ediliyor', detail: 'Stripe · PayPal' };
-                    return event.state === 'done'
-                        ? { state: 'done', title: 'Ödeme servisleri erişilebilir', detail: ratio + latency }
-                        : { state: 'warn', title: 'Ödeme servislerinde sorun', detail: ratio || 'yanıt yok' };
-                }
                 return event.state === 'done'
                     ? { state: 'done', title: `${meta.name} erişimi doğrulandı`, detail: ratio + latency }
                     : { state: 'warn', title: `${meta.name} erişimi kısmi`, detail: ratio };
@@ -410,7 +493,6 @@ document.addEventListener('DOMContentLoaded', () => {
             trace.strategy = event;
         }
         if (event.step === 'service' && event.state !== 'active') {
-            trace.services[event.detail] = event;
             serviceResults[event.detail] = event;
             if (isOpen(supportViewer) && !servicesBusy) renderServices();
         }
@@ -437,16 +519,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateTraceSummary() {
         const partial = trace.ready && trace.ready.state !== 'done';
-        const paymentsIssue = trace.services.payments && trace.services.payments.state !== 'done';
         const checks = Array.from(trace.rows.values()).filter(row => row.classList.contains('is-done')).length;
         const elapsed = trace.ready ? formatShortSeconds(trace.ready.at) : '';
 
         let text = partial ? `Kısmi bağlantı · ${elapsed}` : `Hazır · ${checks} kontrol · ${elapsed}`;
         if (trace.kind === 'recover' && !partial) text = `Bağlantı tazelendi · ${elapsed}`;
-        if (paymentsIssue) text += ' · ödeme ⚠';
 
         trace.summaryText.textContent = text;
-        trace.summary.classList.toggle('is-warn', Boolean(partial || paymentsIssue));
+        trace.summary.classList.toggle('is-warn', Boolean(partial));
     }
 
     function onTraceIdle() {
@@ -590,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showMessage(message, type = 'error') {
+        if (uninstalling) return;
         errorMsg.textContent = message;
         errorCard.classList.toggle('notice-card', type !== 'error');
         supportBtn.classList.toggle('has-error', type === 'error');
@@ -654,13 +735,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'warning',
                 title: 'Tam uyumlu mod bulunamadı',
                 detail: 'En iyi sonuç veren mod kullanılıyor; Glide ölçmeye devam ediyor.'
-            };
-        }
-        if (lower.includes('payment services unreachable')) {
-            return {
-                type: 'warning',
-                title: 'Ödeme servislerine erişilemedi',
-                detail: 'Kart sağlayıcısı veya doğrulama servisi yanıt vermedi.'
             };
         }
         if (lower.includes('switching profile') || lower.includes('initial health check failed')) {
@@ -866,14 +940,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    const update = { state: 'idle', version: '' };
+
+    function setUpdateView(state, text, progress) {
+        update.state = state;
+        updateCard.dataset.state = state;
+        updateCard.disabled = state === 'download' || state === 'install' || state === 'restarting';
+        updateCard.style.setProperty('--p', String(progress));
+        updateLabel.textContent = text;
+    }
+
     function showUpdateAvailable(version) {
-        if (!version) return;
-        updateCard.textContent = `Yeni sürüm hazır (${version}) - Güncelle`;
+        if (!version || update.state !== 'idle') return;
+        update.version = version;
+        setUpdateView('idle', `Yeni sürüm hazır (${version}) · Güncelle`, 0);
         updateCard.hidden = false;
         versionBadge.classList.add('has-update');
     }
 
     EventsOn('update_available', showUpdateAvailable);
+
+    EventsOn('update_progress', (progress) => {
+        if (update.state !== 'download' && update.state !== 'install') return;
+        if (progress.stage === 'install') {
+            setUpdateView('install', 'Yeni sürüm kuruluyor…', 1);
+            return;
+        }
+        const total = progress.total || 0;
+        const ratio = total ? Math.min(1, progress.downloaded / total) : 0;
+        setUpdateView('download', total
+            ? `İndiriliyor %${Math.floor(ratio * 100)} · ${formatBytes(progress.downloaded)} / ${formatBytes(total)}`
+            : `İndiriliyor · ${formatBytes(progress.downloaded)}`, ratio);
+    });
 
     EventsOn('service_state', acceptState);
 
@@ -888,28 +986,41 @@ document.addEventListener('DOMContentLoaded', () => {
     GetPendingUpdate().then(showUpdateAvailable).catch(() => {});
 
     updateCard.addEventListener('click', async () => {
-        const label = updateCard.textContent;
-        updateCard.disabled = true;
-        updateCard.textContent = 'Güncelleniyor...';
-        try {
-            const result = await InstallUpdate();
-            if (result === 'OK') {
-                updateCard.hidden = true;
-                versionBadge.classList.remove('has-update');
-                showMessage('Güncelleme indirildi. Yeni sürüm için uygulamayı yeniden başlatın.', 'notice');
-            } else if (result === 'NONE') {
-                updateCard.hidden = true;
-                versionBadge.classList.remove('has-update');
-                showMessage('Glide zaten en güncel sürümde.', 'notice');
-            } else {
-                updateCard.textContent = label;
-                showMessage('Güncelleme indirilemedi. Lütfen daha sonra tekrar deneyin.');
+        if (update.state === 'ready') {
+            setUpdateView('restarting', 'Yeniden başlatılıyor…', 1);
+            let restarted = false;
+            try {
+                restarted = await RestartApp() === 'OK';
+            } catch (err) {
+                restarted = false;
             }
+            if (!restarted) {
+                setUpdateView('ready', 'Güncelleme hazır · Yeniden başlat', 1);
+                showMessage('Glide yeniden başlatılamadı. Uygulamayı kapatıp tekrar açın.');
+            }
+            return;
+        }
+        if (update.state !== 'idle') return;
+
+        hideMessage();
+        setUpdateView('download', 'İndirme başlatılıyor…', 0);
+        let result = '';
+        try {
+            result = await InstallUpdate();
         } catch (err) {
-            updateCard.textContent = label;
+            result = '';
+        }
+
+        if (result === 'OK') {
+            setUpdateView('ready', 'Güncelleme hazır · Yeniden başlat', 1);
+        } else if (result === 'NONE') {
+            setUpdateView('idle', '', 0);
+            updateCard.hidden = true;
+            versionBadge.classList.remove('has-update');
+            showMessage('Glide zaten en güncel sürümde.', 'notice');
+        } else {
+            setUpdateView('idle', `Yeni sürüm hazır (${update.version}) · Güncelle`, 0);
             showMessage('Güncelleme indirilemedi. Lütfen daha sonra tekrar deneyin.');
-        } finally {
-            updateCard.disabled = false;
         }
     });
 
@@ -1031,9 +1142,119 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function openUninstall() {
+        closeSettings();
+        openLayer(uninstallScrim);
+        openLayer(uninstallDialog);
+        uninstallCancel.focus();
+    }
+
+    function closeUninstall() {
+        closeLayer(uninstallDialog);
+        closeLayer(uninstallScrim);
+    }
+
+    uninstallBtn.addEventListener('click', openUninstall);
+    uninstallCancel.addEventListener('click', () => {
+        closeUninstall();
+        settingsBtn.focus();
+    });
+    uninstallScrim.addEventListener('click', closeUninstall);
+    uninstallConfirm.addEventListener('click', runUninstall);
+
+    async function runUninstall() {
+        if (uninstalling) return;
+        uninstalling = true;
+        hideMessage();
+        closeUninstall();
+        closeSupport();
+
+        const boot = byId('boot');
+        const stepsEl = byId('boot-steps');
+        const tickerEl = byId('boot-ticker');
+        const subEl = byId('boot-sub');
+        const markEl = boot.querySelector('.boot-mark');
+        const elapsedEl = byId('boot-elapsed');
+        const total = Object.keys(UNINSTALL_STEPS).length;
+        const rows = new Map();
+        const finished = new Set();
+        const started = performance.now();
+        let chain = Promise.resolve();
+
+        stepsEl.innerHTML = '';
+        subEl.textContent = 'Glide kaldırılıyor';
+        tickerEl.textContent = 'kaldırma başlatılıyor';
+        elapsedEl.textContent = formatSeconds(0);
+        markEl.style.setProperty('--p', '0');
+        boot.setAttribute('aria-label', 'Glide kaldırılıyor');
+        boot.classList.remove('is-complete');
+        boot.classList.add('is-leaving');
+        boot.hidden = false;
+        void boot.offsetWidth;
+        boot.classList.remove('is-leaving');
+
+        const clock = setInterval(() => {
+            elapsedEl.textContent = formatSeconds(performance.now() - started);
+        }, 40);
+
+        const apply = (event) => {
+            const text = UNINSTALL_STEPS[event.step];
+            if (!text || finished.has(event.step)) return;
+            chain = chain.then(async () => {
+                if (finished.has(event.step)) return;
+                let row = rows.get(event.step);
+                if (!row) {
+                    row = createStepRow(text.active, '');
+                    stepsEl.appendChild(row);
+                    rows.set(event.step, row);
+                    tickerEl.textContent = text.ticker;
+                    if (event.state === 'active') {
+                        await wait(reduceMotion ? 0 : 160);
+                        return;
+                    }
+                    await wait(reduceMotion ? 0 : 120);
+                }
+                if (event.state === 'active') return;
+
+                const { title, detail } = describeUninstall(event);
+                setStepRow(row, event.state, title, detail);
+                finished.add(event.step);
+                markEl.style.setProperty('--p', String(Math.round(finished.size / total * 100)));
+                await wait(reduceMotion ? 0 : 90);
+            });
+        };
+
+        const stopListening = EventsOn('uninstall_progress', apply);
+        let events = null;
+        try {
+            events = await Uninstall();
+        } catch (err) {
+            events = null;
+        }
+        (events || []).forEach(apply);
+        await chain;
+        stopListening();
+        clearInterval(clock);
+        elapsedEl.textContent = formatSeconds(performance.now() - started);
+
+        const list = events || [];
+        const keptApp = !events || list.some(event => event.step === 'app' && event.state !== 'done');
+        const warned = list.some(event => event.state === 'warn');
+        subEl.textContent = events ? 'Glide kaldırıldı' : 'Kaldırma tamamlanamadı';
+        tickerEl.textContent = keptApp
+            ? 'uygulama dosyasını elle silin · kapanıyor'
+            : warned ? 'bazı adımlar uyarı verdi · kapanıyor' : 'iz kalmadı · pencere kapanıyor';
+        boot.classList.add('is-complete');
+
+        await wait(UNINSTALL_CLOSE_MS);
+        FinishUninstall().catch(() => {});
+    }
+
     document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape') return;
-        if (isOpen(supportViewer)) {
+        if (e.key !== 'Escape' || uninstalling) return;
+        if (isOpen(uninstallDialog)) {
+            closeUninstall();
+        } else if (isOpen(supportViewer)) {
             closeSupport();
         } else if (isOpen(settingsPanel)) {
             closeSettings();
@@ -1055,7 +1276,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state: elevated ? 'done' : 'failed',
             detail: elevated ? 'tam erişim' : 'ağ sürücüsü için',
             dwell: 110,
-            ticker: ['oturum belirteci · yükseltme düzeyi okunuyor']
+            ticker: ['Windows yönetici izni kontrol ediliyor']
         });
 
         plan.push({

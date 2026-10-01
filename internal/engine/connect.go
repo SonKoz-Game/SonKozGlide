@@ -25,16 +25,6 @@ const (
 
 var errScanCanceled = errors.New("baglanti taramasi iptal edildi")
 
-var paymentTargets = []string{
-	"discord.com",
-	"js.stripe.com",
-	"api.stripe.com",
-	"hcaptcha.com",
-	"apis.roblox.com",
-	"roblox-api.arkoselabs.com",
-	"www.paypal.com",
-}
-
 var (
 	scanMu        sync.Mutex
 	scanSeq       uint64
@@ -431,47 +421,9 @@ func finishServiceCheck(check ServiceCheck) ServiceCheck {
 	return check
 }
 
-func checkPaymentServices(ctx context.Context) ServiceCheck {
-	check := ServiceCheck{ID: "payments"}
-	for _, metric := range probeTargets(ctx, paymentTargets, serviceProbeTime, false) {
-		addServiceMetric(&check, metric)
-	}
-	return finishServiceCheck(check)
-}
-
-func reportPaymentServices(run uint64) {
-	ctx, cancel := context.WithTimeout(context.Background(), serviceProbeTime+time.Second)
-	defer cancel()
-
-	emitProgress(ProgressEvent{Run: run, Step: "service", State: stepActive, Detail: "payments"})
-	check := checkPaymentServices(ctx)
-	state := stepDone
-	if check.Count == 0 || len(check.Failed) > 0 {
-		state = stepFailed
-	}
-	if len(check.Failed) > 0 {
-		appendEngineLog("payment services unreachable: " + strings.Join(check.Failed, ", "))
-	}
-	emitProgress(ProgressEvent{Run: run, Step: "service", State: state, Detail: "payments", OK: check.OK, Count: check.Count, Latency: check.Latency})
-}
-
 func CheckServices() []ServiceCheck {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*serviceProbeTime)
 	defer cancel()
 
-	var wg sync.WaitGroup
-	var core []probeMetric
-	var payments ServiceCheck
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		core = probeTargets(ctx, healthTargets, serviceProbeTime, false)
-	}()
-	go func() {
-		defer wg.Done()
-		payments = checkPaymentServices(ctx)
-	}()
-	wg.Wait()
-
-	return append(groupServiceMetrics(core), payments)
+	return groupServiceMetrics(probeTargets(ctx, healthTargets, serviceProbeTime, false))
 }

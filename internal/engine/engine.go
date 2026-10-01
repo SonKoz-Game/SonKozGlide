@@ -537,11 +537,7 @@ func Start() error {
 	step(run, "prepare", stepDone, "")
 
 	order := strategyOrder(preferredStrategy(requestedProfile), "")
-	if err := connectStrategies(ctx, run, PhaseStarting, order, nil); err != nil {
-		return err
-	}
-	go reportPaymentServices(run)
-	return nil
+	return connectStrategies(ctx, run, PhaseStarting, order, nil)
 }
 
 func startSystemOptimizations(run uint64) {

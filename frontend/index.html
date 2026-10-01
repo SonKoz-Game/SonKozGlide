@@ -113,6 +113,10 @@
                 <span class="btn-label">Ayarları kaydet</span>
                 <span class="btn-spinner" aria-hidden="true"></span>
             </button>
+            <button type="button" class="settings-uninstall" id="uninstall-btn">
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+                <span>Glide'ı bilgisayardan kaldır</span>
+            </button>
         </div>
 
         <div class="main-content">
@@ -144,7 +148,8 @@
             </div>
 
             <button type="button" id="update-card" class="update-action-btn" hidden>
-                Yeni sürüm hazır - Güncelle
+                <span class="update-fill" aria-hidden="true"></span>
+                <span class="update-label" id="update-label" aria-live="polite">Yeni sürüm hazır · Güncelle</span>
             </button>
         </div>
 
@@ -174,7 +179,29 @@
             <div class="support-content" id="support-content">
                 <div class="support-empty">Bağlantı durumu hazırlanıyor...</div>
             </div>
-            <div class="support-footer">Destek ekibi gerekirse bu bilgileri inceleyebilir.</div>
+            <div class="support-footer">Bu bilgiler yalnızca bu bilgisayarda tutulur, hiçbir yere gönderilmez.</div>
+        </div>
+
+        <div class="scrim layer" id="uninstall-scrim" hidden></div>
+        <div class="confirm-dialog layer" id="uninstall-dialog" role="alertdialog" aria-modal="true"
+            aria-labelledby="uninstall-title" aria-describedby="uninstall-desc" hidden>
+            <div class="confirm-head">
+                <span class="confirm-icon"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></span>
+                <div>
+                    <div class="confirm-title" id="uninstall-title">Glide kaldırılsın mı?</div>
+                    <p class="confirm-text" id="uninstall-desc">Bilgisayarınızda Glide'dan iz kalmaz.</p>
+                </div>
+            </div>
+            <ul class="confirm-list">
+                <li><i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i>Bağlantı ve çalışan bileşenler durdurulur, DNS ve ağ ayarlarınız eski haline döner</li>
+                <li><i class="fa-solid fa-microchip" aria-hidden="true"></i>Başlangıç görevi ve WinDivert sürücüsü kaldırılır</li>
+                <li><i class="fa-solid fa-folder-minus" aria-hidden="true"></i>Bileşenler, ayarlar, öğrenilen modlar ve kayıtlar silinir</li>
+                <li><i class="fa-solid fa-file-circle-xmark" aria-hidden="true"></i>Uygulama dosyası silinir, pencere kapanır</li>
+            </ul>
+            <div class="confirm-actions">
+                <button type="button" class="confirm-cancel" id="uninstall-cancel">Vazgeç</button>
+                <button type="button" class="confirm-danger" id="uninstall-confirm">Kaldır</button>
+            </div>
         </div>
     </div>
     <script src="./src/main.js" type="module"></script>

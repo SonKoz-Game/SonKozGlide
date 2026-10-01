@@ -244,6 +244,30 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UninstallEvent {
+	    step: string;
+	    state: string;
+	    reason?: string;
+	    items?: string[];
+	    files?: number;
+	    bytes?: number;
+	    pending?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UninstallEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.step = source["step"];
+	        this.state = source["state"];
+	        this.reason = source["reason"];
+	        this.items = source["items"];
+	        this.files = source["files"];
+	        this.bytes = source["bytes"];
+	        this.pending = source["pending"];
+	    }
+	}
 
 }
 

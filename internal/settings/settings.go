@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 )
@@ -24,11 +25,13 @@ func defaults() Config {
 	}
 }
 
-func getPath() string {
+func Dir() string {
 	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".sonkoz")
-	_ = os.MkdirAll(dir, 0755)
-	return filepath.Join(dir, "settings.json")
+	return filepath.Join(home, ".sonkoz")
+}
+
+func getPath() string {
+	return filepath.Join(Dir(), "settings.json")
 }
 
 func Get() Config {
@@ -46,6 +49,20 @@ func Get() Config {
 }
 
 func Save(cfg Config) error {
+	if err := os.MkdirAll(Dir(), 0755); err != nil {
+		return err
+	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	return os.WriteFile(getPath(), data, 0644)
+}
+
+func Remove() (bool, error) {
+	dir := Dir()
+	if !filepath.IsAbs(dir) {
+		return false, errors.New("settings directory is not absolute")
+	}
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return true, os.RemoveAll(dir)
 }

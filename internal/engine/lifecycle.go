@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"sync"
+	"time"
 )
 
 type Phase string
@@ -28,6 +29,7 @@ var (
 	opDesired bool
 	opRestart bool
 	opWorking bool
+	opClosed  bool
 
 	startFn   = Start
 	haltFn    = haltService
@@ -42,6 +44,10 @@ func RequestRestart() { requestOp(true, true) }
 
 func requestOp(start bool, restart bool) {
 	opMu.Lock()
+	if opClosed && start {
+		opMu.Unlock()
+		return
+	}
 	changed := opDesired != start || restart
 	opDesired = start
 	if restart {
@@ -105,6 +111,28 @@ func opWorker() {
 		opMu.Unlock()
 
 		announceOp(next)
+	}
+}
+
+func Shutdown(timeout time.Duration) bool {
+	opMu.Lock()
+	opClosed = true
+	opMu.Unlock()
+
+	RequestStop()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		opMu.Lock()
+		working := opWorking
+		opMu.Unlock()
+		if !working {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

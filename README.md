@@ -41,6 +41,10 @@ Discord, Roblox, OpenAI, Telegram, YouTube ve Meta (Instagram, WhatsApp).
 2. Çalıştırın (WinDivert sürücüsü için yönetici izni gerekir).
 3. Güç düğmesine basın. Glide hattınıza uygun modu ölçer ve bağlantıyı açar.
 
+Yeni sürüm çıktığında ana ekranda güncelleme düğmesi belirir. İndirme
+ilerlemesi düğmede görünür; bitince **Yeniden başlat** ile yeni sürüm açılır ve
+bağlantı açıksa kaldığı yerden devam eder.
+
 Gereksinimler: Windows 10/11, 64 bit.
 
 ## Windows uyarısı ve güvenlik
@@ -88,13 +92,35 @@ veri toplamaz; ayarlar ve kayıtlar yalnızca bilgisayarınızda tutulur.
 
 Uygulamanın kendi açtığı ağ bağlantıları:
 
-- Erişim kontrolü için Discord, Roblox ve ödeme servislerine (Stripe, PayPal,
-  hCaptcha, Arkose) TLS el sıkışmaları; veri gönderilmez.
+- Erişim kontrolü için Discord ve Roblox sunucularına TLS el sıkışmaları; veri
+  gönderilmez.
 - İnternetin açık olup olmadığını anlamak için Google, Microsoft ve Cloudflare'e
   TLS el sıkışmaları.
 - Cloudflare (`1.1.1.1`) ve Google (`8.8.8.8`) üzerinden DNS sorguları ve MTU
   ölçümü için bu adreslere ping.
 - GitHub üzerinden sürüm kontrolü ve güncelleme indirme.
+
+## Kaldırma
+
+**Tercihler → Glide'ı bilgisayardan kaldır** Glide'ın yaptığı her değişikliği
+geri alır ve dosyalarını siler:
+
+- Bağlantıyı ve Glide klasöründen çalışan her süreci (ör. sahipsiz kalmış
+  `winws.exe`) durdurur; DNS, TCP ve MTU ayarlarını önceki değerlerine döndürür.
+- Başlangıç görevini (Görev Zamanlayıcı → `SonKozGlide`) siler.
+- WinDivert sürücüsünü durdurup kaydını kaldırır. Glide'ın sürücüsünü o anda
+  başka bir uygulama kullanıyorsa önce o uygulama kapatılır. Sürücü başka bir
+  uygulamaya aitse dokunulmaz.
+- `C:\ProgramData\SonKozGlide` (bileşenler, kural listesi, öğrenilen modlar,
+  kayıtlar), `%USERPROFILE%\.sonkoz` (ayarlar) ve `%APPDATA%\<exe adı>`
+  (arayüz önbelleği) klasörlerini siler.
+- Pencere kapandıktan sonra uygulama dosyasının kendisini siler.
+
+Yeniden başlatma gerekmez: Glide'ın kendi açık tuttuğu dosyalar da pencere
+kapanır kapanmaz silinir.
+
+Uygulama dosyasını kaldırmadan sildiyseniz en kolay yol, Glide'ı yeniden indirip
+bu düğmeyi kullanmaktır; DNS yedeği de böylece geri yüklenir.
 
 ## Geliştirme
 
@@ -132,12 +158,12 @@ sırasında uygulamayı yönetici olarak başlatın.
 
 ### Sürüm yayınlamak
 
-1. `build.bat 1.3.0` veya `scripts/version.ps1 -Set 1.3.0` ile `wails.json`
+1. `build.bat 1.4.0` veya `scripts/version.ps1 -Set 1.4.0` ile `wails.json`
    içindeki sürümü güncelleyip commit edin.
 2. Aynı sürümle etiket oluşturup gönderin:
 
    ```bash
-   git tag v1.3.0 && git push origin v1.3.0
+   git tag v1.4.0 && git push origin v1.4.0
    ```
 
 [Release iş akışı](.github/workflows/release.yml) etiketi `wails.json` ile
@@ -150,11 +176,12 @@ adını değiştirmeyin.
 
 | Yol | İçerik |
 |---|---|
-| `main.go`, `app.go` | Wails uygulaması, sistem tepsisi, otomatik başlatma, arayüz bağlamaları |
-| `internal/engine` | winws yaşam döngüsü, strateji tarama ve doğrulama, sağlık izleme, DNS ve ağ ayarları |
+| `main.go`, `app.go`, `uninstall.go` | Wails uygulaması, sistem tepsisi, otomatik başlatma, kaldırma, arayüz bağlamaları |
+| `internal/engine` | winws yaşam döngüsü, strateji tarama ve doğrulama, sağlık izleme, DNS ve ağ ayarları, kurulum temizliği |
 | `internal/router` | `rules.yaml` dosyasını winws hostlist'ine derler |
 | `internal/settings` | Kullanıcı tercihleri (`%USERPROFILE%\.sonkoz\settings.json`) |
-| `internal/updater` | GitHub Releases üzerinden sürüm kontrolü ve güncelleme |
+| `internal/updater` | GitHub Releases üzerinden sürüm kontrolü, ilerlemeli güncelleme |
+| `internal/instance` | Tek kopya kilidi; yeniden başlatmada eski kopyanın kapanmasını bekler |
 | `frontend/` | Arayüz (Vite, saf JavaScript) |
 | `resources/` | Gömülü üçüncü taraf ikililer ve tepsi simgeleri |
 | `rules/rules.yaml` | Platform ve alan adı listesi |

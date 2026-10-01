@@ -35,6 +35,10 @@ type App struct {
 	mu            sync.Mutex
 	pendingUpdate string
 	startupError  string
+	uninstalling  bool
+	updating      bool
+	reconnect     bool
+	quitOnce      sync.Once
 }
 
 const (
@@ -85,6 +89,7 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	go a.migrateLegacyAutoStart()
 	go a.periodicUpdateCheck()
+	go updater.RemoveLeftovers()
 }
 
 func (a *App) applyTrayState(status engine.Status) {
@@ -162,7 +167,7 @@ func (a *App) onReady() {
 	}()
 
 	conf := settings.Get()
-	if conf.AutoStartBypass && !engine.IsProcessRunning() {
+	if (conf.AutoStartBypass || a.reconnect) && !engine.IsProcessRunning() {
 		engine.RequestStart()
 	} else {
 		go func() {
@@ -219,7 +224,7 @@ func (a *App) GetBootReport() BootReport {
 		Info:         engine.GetBootInfo(),
 		Version:      updater.GetVersion(),
 		Elevated:     windows.GetCurrentProcessToken().IsElevated(),
-		AutoConnect:  settings.Get().AutoStartBypass,
+		AutoConnect:  settings.Get().AutoStartBypass || a.reconnect,
 		StartupError: startupError,
 	}
 }
@@ -383,6 +388,19 @@ func (a *App) UpdateSettings(cfg settings.Config) string {
 }
 
 func (a *App) InstallUpdate() string {
+	a.mu.Lock()
+	if a.updating {
+		a.mu.Unlock()
+		return "BUSY"
+	}
+	a.updating = true
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.updating = false
+		a.mu.Unlock()
+	}()
+
 	latest, err := updater.Check()
 	if err != nil {
 		return err.Error()
@@ -390,8 +408,34 @@ func (a *App) InstallUpdate() string {
 	if latest == nil {
 		return "NONE"
 	}
-	if err := updater.Apply(latest); err != nil {
+	err = updater.Apply(latest, func(p updater.Progress) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "update_progress", p)
+		}
+	})
+	if err != nil {
 		return err.Error()
 	}
+	return "OK"
+}
+
+func (a *App) RestartApp() string {
+	exePath, err := currentExecutablePath()
+	if err != nil {
+		return err.Error()
+	}
+
+	args := []string{restartFlag}
+	if engine.IsProcessRunning() {
+		args = append(args, reconnectFlag)
+	}
+	if err := exec.Command(exePath, args...).Start(); err != nil {
+		return err.Error()
+	}
+
+	go func() {
+		engine.Stop()
+		a.quit()
+	}()
 	return "OK"
 }

@@ -4,6 +4,8 @@ import {main} from '../models';
 import {engine} from '../models';
 import {settings} from '../models';
 
+export function FinishUninstall():Promise<void>;
+
 export function GetAppVersion():Promise<string>;
 
 export function GetAutoStart():Promise<boolean>;
@@ -24,6 +26,8 @@ export function GetTuningReport():Promise<engine.TuningReport>;
 
 export function InstallUpdate():Promise<string>;
 
+export function RestartApp():Promise<string>;
+
 export function RunServiceCheck():Promise<Array<engine.ServiceCheck>>;
 
 export function SetAutoStart(arg1:boolean):Promise<string>;
@@ -31,5 +35,7 @@ export function SetAutoStart(arg1:boolean):Promise<string>;
 export function StartBypass():Promise<string>;
 
 export function StopBypass():Promise<string>;
+
+export function Uninstall():Promise<Array<main.UninstallEvent>>;
 
 export function UpdateSettings(arg1:settings.Config):Promise<string>;
