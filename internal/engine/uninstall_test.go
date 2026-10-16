@@ -216,10 +216,10 @@ func TestWebviewDataDirsFindsOwnProfilesOnly(t *testing.T) {
 }
 
 func TestRemovalScriptQuotesPaths(t *testing.T) {
-	script := removalScript(4242, []string{`C:\Users\Ali'nin\İndirilenler\SonKozGlide.exe`, `C:\x y\$env.exe`})
+	script := removalScript([]int{4242, 4343}, []string{`C:\Users\Ali'nin\İndirilenler\SonKozGlide.exe`, `C:\x y\$env.exe`})
 
 	for _, want := range []string{
-		"Wait-Process -Id 4242",
+		"Wait-Process -Id 4242,4343 ",
 		`'C:\Users\Ali''nin\İndirilenler\SonKozGlide.exe'`,
 		`'C:\x y\$env.exe'`,
 	} {

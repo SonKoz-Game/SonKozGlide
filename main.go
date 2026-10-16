@@ -3,14 +3,13 @@ package main
 import (
 	"embed"
 	"os"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/SonKoz-Game/SonKozGlide/internal/instance"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	winopts "github.com/wailsapp/wails/v2/pkg/options/windows"
 	"golang.org/x/sys/windows"
 )
 
@@ -26,33 +25,76 @@ var assets embed.FS
 const (
 	windowTitle       = "SonKoz Glide"
 	instanceMutexName = "SonKozGlide_SingleInstance_Mutex"
+	showEventName     = `Local\SonKozGlide_ShowWindow`
+	uiFlag            = "-ui"
+	hideFlag          = "-hide"
+	startupFlag       = "-startup"
 	restartFlag       = "-restart"
 	reconnectFlag     = "-connect"
 	restartWait       = 30 * time.Second
 )
 
 func main() {
+	if bindingsBuild || hasArg(uiFlag) {
+		runUI()
+		return
+	}
+	runCore()
+}
+
+func runCore() {
+	background := hasArg(hideFlag) || hasArg(startupFlag)
+
 	wait := time.Duration(0)
 	if hasArg(restartFlag) {
 		wait = restartWait
 	}
 	handle, ok := instance.Acquire(instanceMutexName, wait)
 	if !ok {
-		focusExistingWindow()
-		os.Exit(0)
+		if !background {
+			signalRunningInstance()
+		}
+		return
 	}
 	defer windows.CloseHandle(handle)
 
-	app := NewApp(embeddedFiles, rulesYAML)
-	app.reconnect = hasArg(reconnectFlag)
+	showRequests, showErr := createShowEvent()
+
+	core := NewCore(embeddedFiles, rulesYAML)
+	core.reconnect = hasArg(reconnectFlag)
+	if !background {
+		core.showUI()
+	}
+	core.init()
+	if background {
+		core.trimWhenIdle()
+	}
+	if showErr == nil {
+		go core.watchShowRequests(showRequests)
+	}
+	core.run()
+}
+
+func runUI() {
+	var core *ipcConn
+	if !bindingsBuild {
+		conn, err := attachCore()
+		if err != nil {
+			return
+		}
+		core = conn
+	}
+
+	app := NewApp(core)
+	if core != nil {
+		go app.serveCore()
+	}
 
 	err := wails.Run(&options.App{
-		Title:             windowTitle,
-		Width:             380,
-		Height:            600,
-		DisableResize:     true,
-		HideWindowOnClose: true,
-		StartHidden:       hasArg("-hide") || hasArg("-startup"),
+		Title:         windowTitle,
+		Width:         380,
+		Height:        600,
+		DisableResize: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -60,6 +102,9 @@ func main() {
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		Windows: &winopts.Options{
+			WebviewGpuIsDisabled: true,
 		},
 	})
 
@@ -75,25 +120,4 @@ func hasArg(name string) bool {
 		}
 	}
 	return false
-}
-
-func focusExistingWindow() {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	findWindow := user32.NewProc("FindWindowW")
-	showWindow := user32.NewProc("ShowWindow")
-	setForeground := user32.NewProc("SetForegroundWindow")
-
-	title, err := syscall.UTF16PtrFromString(windowTitle)
-	if err != nil {
-		return
-	}
-
-	hwnd, _, _ := findWindow.Call(0, uintptr(unsafe.Pointer(title)))
-	if hwnd == 0 {
-		return
-	}
-
-	const swRestore = 9
-	showWindow.Call(hwnd, swRestore)
-	setForeground.Call(hwnd)
 }

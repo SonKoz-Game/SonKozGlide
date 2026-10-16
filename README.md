@@ -28,6 +28,10 @@ yönlendirilmez, sadece bilgisayarınızdan çıkan paketlerin biçimi değişti
   uygulanır, kapatıldığında önceki ayarlar geri yüklenir.
 - **Bağlantı Doktoru (isteğe bağlı):** TCP pencere ölçekleme ve MTU sorunlarını
   tespit edip düzeltir, kapatıldığında geri alır.
+- **Hafif çalışma:** Bağlantıyı yöneten çekirdek ile pencere ayrı süreçlerdir.
+  Pencereyi kapattığınızda arayüz ve tarayıcı bileşeni (WebView2) tamamen
+  kapanır; bağlantı arka planda sürer ve sistem tepsisinde yalnızca küçük
+  çekirdek kalır.
 
 Kapsanan platformlar [`rules/rules.yaml`](rules/rules.yaml) dosyasında tanımlıdır:
 Discord, Roblox, OpenAI, Telegram, YouTube ve Meta (Instagram, WhatsApp).
@@ -176,7 +180,8 @@ adını değiştirmeyin.
 
 | Yol | İçerik |
 |---|---|
-| `main.go`, `app.go`, `uninstall.go` | Wails uygulaması, sistem tepsisi, otomatik başlatma, kaldırma, arayüz bağlamaları |
+| `main.go`, `core.go`, `uninstall.go` | Arka plan çekirdeği: sistem tepsisi, otomatik başlatma, güncelleme, kaldırma |
+| `app.go`, `ipc.go`, `window.go` | Ayrı arayüz süreci (`-ui`), Wails bağlamaları ve çekirdekle konuştuğu boru |
 | `internal/engine` | winws yaşam döngüsü, strateji tarama ve doğrulama, sağlık izleme, DNS ve ağ ayarları, kurulum temizliği |
 | `internal/router` | `rules.yaml` dosyasını winws hostlist'ine derler |
 | `internal/settings` | Kullanıcı tercihleri (`%USERPROFILE%\.sonkoz\settings.json`) |

@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let serviceResults = {};
     let servicesBusy = false;
     let uninstalling = false;
+    let asleep = false;
 
     const PHASE_TEXT = {
         idle: {
@@ -887,6 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function refreshSupportInfo() {
+        if (asleep) return;
         try {
             const [logs, tuning] = await Promise.all([GetLogs(), GetTuningReport()]);
             renderSupportInfo(logs, tuning);
@@ -974,6 +976,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     EventsOn('service_state', acceptState);
+
+    EventsOn('window_visibility', (visible) => {
+        if (asleep === !visible) return;
+        asleep = !visible;
+        document.documentElement.classList.toggle('is-asleep', asleep);
+        if (!asleep) checkStatus();
+    });
 
     EventsOn('service_error', (message) => {
         showMessage(normalizeError(message));
@@ -1393,6 +1402,18 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             report = null;
         }
+
+        if (report && report.resumed) {
+            clearTimeout(failsafe);
+            clearInterval(clock);
+            left = true;
+            boot.hidden = true;
+            document.body.classList.remove('splash');
+            hydrateTrace();
+            if (report.startupError) showMessage(report.startupError);
+            return;
+        }
+
         byId('boot-version').textContent = report && report.version ? report.version : '';
 
         const plan = buildBootPlan(report);
@@ -1431,6 +1452,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     runBoot();
 
-    setInterval(checkStatus, statusPollMs);
+    setInterval(() => {
+        if (!asleep) checkStatus();
+    }, statusPollMs);
     checkStatus();
 });

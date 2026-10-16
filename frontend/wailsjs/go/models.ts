@@ -212,6 +212,7 @@ export namespace main {
 	    elevated: boolean;
 	    autoConnect: boolean;
 	    startupError: string;
+	    resumed: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BootReport(source);
@@ -224,6 +225,7 @@ export namespace main {
 	        this.elevated = source["elevated"];
 	        this.autoConnect = source["autoConnect"];
 	        this.startupError = source["startupError"];
+	        this.resumed = source["resumed"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

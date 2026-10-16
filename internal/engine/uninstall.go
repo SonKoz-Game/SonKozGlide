@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -300,24 +301,34 @@ func isWebviewDataDir(dir string) bool {
 	return err == nil && info.IsDir()
 }
 
-func ScheduleRemovalAfterExit(paths []string) error {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", removalScript(os.Getpid(), paths))
+func ScheduleRemovalAfterExit(paths []string, waitPIDs ...int) error {
+	pids := []int{os.Getpid()}
+	for _, pid := range waitPIDs {
+		if pid > 0 {
+			pids = append(pids, pid)
+		}
+	}
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", removalScript(pids, paths))
 	cmd.Dir = os.TempDir()
 	return hideWindow(cmd).Start()
 }
 
-func removalScript(pid int, paths []string) string {
+func removalScript(pids []int, paths []string) string {
+	ids := make([]string, len(pids))
+	for i, pid := range pids {
+		ids[i] = strconv.Itoa(pid)
+	}
 	quoted := make([]string, len(paths))
 	for i, path := range paths {
 		quoted[i] = "'" + strings.ReplaceAll(path, "'", "''") + "'"
 	}
 	return fmt.Sprintf("$ErrorActionPreference='SilentlyContinue';"+
-		"Wait-Process -Id %d -Timeout 60;"+
+		"Wait-Process -Id %s -Timeout 60;"+
 		"$targets=@(%s);"+
 		"for($i=0;$i -lt 40;$i++){"+
 		"$left=@($targets|Where-Object{Test-Path -LiteralPath $_});"+
 		"if($left.Count -eq 0){break};"+
 		"$left|ForEach-Object{Remove-Item -LiteralPath $_ -Recurse -Force};"+
 		"Start-Sleep -Milliseconds 500}",
-		pid, strings.Join(quoted, ","))
+		strings.Join(ids, ","), strings.Join(quoted, ","))
 }

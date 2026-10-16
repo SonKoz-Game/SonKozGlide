@@ -51,6 +51,7 @@ const (
 	probeAddressAttempts  = 2
 	maxLogFileBytes       = 1024 * 1024
 	maxLogReadBytes       = 64 * 1024
+	setupChunkSize        = 64 * 1024
 	adaptiveStateFile     = "adaptive_profiles.json"
 	adaptiveStateVer      = 2
 	adaptiveAlpha         = 0.35
@@ -464,34 +465,83 @@ func Setup(embeddedFiles embed.FS) error {
 
 	updated := 0
 	components := make([]BootFile, 0, len(files))
+	buffers := make([]byte, 2*setupChunkSize)
 	for _, file := range files {
-		data, err := embeddedFiles.ReadFile("resources/" + file.Name())
+		info, err := file.Info()
 		if err != nil {
 			continue
 		}
-
+		source := "resources/" + file.Name()
 		destPath := filepath.Join(targetDir, file.Name())
-		if stat, err := os.Stat(destPath); err == nil && stat.Size() == int64(len(data)) {
-			existing, readErr := os.ReadFile(destPath)
-			if readErr == nil && bytes.Equal(existing, data) {
-				components = append(components, BootFile{Name: file.Name(), Bytes: int64(len(data))})
-				continue
-			}
+		if sameEmbeddedFile(embeddedFiles, source, destPath, info.Size(), buffers) {
+			components = append(components, BootFile{Name: file.Name(), Bytes: info.Size()})
+			continue
 		}
 
-		if err := os.WriteFile(destPath, data, 0755); err != nil {
+		if err := writeEmbeddedFile(embeddedFiles, source, destPath); err != nil {
 			CleanOldServices()
-			if retryErr := os.WriteFile(destPath, data, 0755); retryErr != nil {
+			if retryErr := writeEmbeddedFile(embeddedFiles, source, destPath); retryErr != nil {
 				return fmt.Errorf("%s yazilamadi: %w", file.Name(), retryErr)
 			}
 		}
 		updated++
-		components = append(components, BootFile{Name: file.Name(), Bytes: int64(len(data)), Updated: true})
+		components = append(components, BootFile{Name: file.Name(), Bytes: info.Size(), Updated: true})
 	}
 	_ = os.Remove(filepath.Join(targetDir, legacyBrokerExe))
 
 	recordSetupStats(components, updated, time.Since(started))
 	return nil
+}
+
+func sameEmbeddedFile(embeddedFiles fs.FS, source string, destPath string, size int64, buffers []byte) bool {
+	stat, err := os.Stat(destPath)
+	if err != nil || stat.Size() != size {
+		return false
+	}
+
+	want, err := embeddedFiles.Open(source)
+	if err != nil {
+		return false
+	}
+	defer want.Close()
+	have, err := os.Open(destPath)
+	if err != nil {
+		return false
+	}
+	defer have.Close()
+
+	wantBuf, haveBuf := buffers[:setupChunkSize], buffers[setupChunkSize:]
+	for {
+		n, wantErr := io.ReadFull(want, wantBuf)
+		m, haveErr := io.ReadFull(have, haveBuf)
+		if n != m || !bytes.Equal(wantBuf[:n], haveBuf[:m]) {
+			return false
+		}
+		if wantErr == io.EOF || wantErr == io.ErrUnexpectedEOF {
+			return haveErr == wantErr
+		}
+		if wantErr != nil || haveErr != nil {
+			return false
+		}
+	}
+}
+
+func writeEmbeddedFile(embeddedFiles fs.FS, source string, destPath string) error {
+	src, err := embeddedFiles.Open(source)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		return err
+	}
+	return dst.Close()
 }
 
 func Start() error {
@@ -910,7 +960,7 @@ func dialTLS(ctx context.Context, serverName string, address string, timeout tim
 
 	dialer := tls.Dialer{
 		NetDialer: &net.Dialer{Timeout: timeout},
-		Config:    &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12},
+		Config:    probeTLSConfig(serverName),
 	}
 	return dialer.DialContext(ctx, "tcp", net.JoinHostPort(address, "443"))
 }

@@ -7,8 +7,6 @@ import (
 
 	"github.com/SonKoz-Game/SonKozGlide/internal/engine"
 	"github.com/SonKoz-Game/SonKozGlide/internal/settings"
-	"github.com/getlantern/systray"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -26,14 +24,14 @@ type UninstallEvent struct {
 	Pending int      `json:"pending,omitempty"`
 }
 
-func (a *App) Uninstall() []UninstallEvent {
-	a.mu.Lock()
-	if a.uninstalling {
-		a.mu.Unlock()
+func (c *Core) Uninstall() []UninstallEvent {
+	c.mu.Lock()
+	if c.uninstalling {
+		c.mu.Unlock()
 		return nil
 	}
-	a.uninstalling = true
-	a.mu.Unlock()
+	c.uninstalling = true
+	c.mu.Unlock()
 
 	exePath, exeErr := currentExecutablePath()
 	dnsApplied, tuningApplied := engine.SystemChangesApplied()
@@ -41,7 +39,7 @@ func (a *App) Uninstall() []UninstallEvent {
 	var leftovers []string
 
 	events := []UninstallEvent{
-		a.uninstallStep("connection", func() UninstallEvent {
+		c.uninstallStep("connection", func() UninstallEvent {
 			active := engine.IsProcessRunning()
 			if !engine.Shutdown(uninstallStopTimeout) {
 				engine.Stop()
@@ -53,7 +51,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "done", Items: stopped}
 		}),
 
-		a.uninstallStep("network", func() UninstallEvent {
+		c.uninstallStep("network", func() UninstallEvent {
 			engine.RestoreDNS()
 			engine.RestoreNetworkTuning()
 
@@ -70,7 +68,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "done", Items: items}
 		}),
 
-		a.uninstallStep("autostart", func() UninstallEvent {
+		c.uninstallStep("autostart", func() UninstallEvent {
 			existed := autoStartTaskExists()
 			taskErr := deleteAutoStartTask()
 			runRemoved := deleteLegacyRunEntry() == nil
@@ -83,7 +81,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "done"}
 		}),
 
-		a.uninstallStep("driver", func() UninstallEvent {
+		c.uninstallStep("driver", func() UninstallEvent {
 			result, closed, err := engine.RemoveDriverService()
 			switch {
 			case result == engine.DriverRemoved:
@@ -96,7 +94,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "skipped", Reason: string(result)}
 		}),
 
-		a.uninstallStep("files", func() UninstallEvent {
+		c.uninstallStep("files", func() UninstallEvent {
 			result := engine.RemoveFiles()
 			leftovers = result.Remaining
 			if result.Files == 0 && result.Pending == 0 {
@@ -105,7 +103,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "done", Files: result.Files, Bytes: result.Bytes, Pending: result.Pending}
 		}),
 
-		a.uninstallStep("data", func() UninstallEvent {
+		c.uninstallStep("data", func() UninstallEvent {
 			var items []string
 			removed, err := settings.Remove()
 			if removed {
@@ -129,7 +127,7 @@ func (a *App) Uninstall() []UninstallEvent {
 			return UninstallEvent{State: "done", Items: items}
 		}),
 
-		a.uninstallStep("app", func() UninstallEvent {
+		c.uninstallStep("app", func() UninstallEvent {
 			targets := append([]string{}, leftovers...)
 			if currentProfile != "" {
 				targets = append(targets, currentProfile)
@@ -142,44 +140,35 @@ func (a *App) Uninstall() []UninstallEvent {
 					filepath.Join(dir, "."+name+".new"),
 				)
 			}
-			if err := engine.ScheduleRemovalAfterExit(targets); err != nil || exeErr != nil {
+			if err := engine.ScheduleRemovalAfterExit(targets, c.uiPID()); err != nil || exeErr != nil {
 				return UninstallEvent{State: "failed"}
 			}
 			return UninstallEvent{State: "done"}
 		}),
 	}
 
-	time.AfterFunc(uninstallQuitDelay, a.quit)
+	time.AfterFunc(uninstallQuitDelay, c.quit)
 	return events
 }
 
-func (a *App) FinishUninstall() {
-	a.mu.Lock()
-	uninstalling := a.uninstalling
-	a.mu.Unlock()
+func (c *Core) FinishUninstall() {
+	c.mu.Lock()
+	uninstalling := c.uninstalling
+	c.mu.Unlock()
 
 	if uninstalling {
-		a.quit()
+		c.quit()
 	}
 }
 
-func (a *App) uninstallStep(step string, run func() UninstallEvent) UninstallEvent {
-	a.emitUninstall(UninstallEvent{Step: step, State: "active"})
+func (c *Core) uninstallStep(step string, run func() UninstallEvent) UninstallEvent {
+	c.emitUninstall(UninstallEvent{Step: step, State: "active"})
 	event := run()
 	event.Step = step
-	a.emitUninstall(event)
+	c.emitUninstall(event)
 	return event
 }
 
-func (a *App) emitUninstall(event UninstallEvent) {
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "uninstall_progress", event)
-	}
-}
-
-func (a *App) quit() {
-	a.quitOnce.Do(func() {
-		systray.Quit()
-		runtime.Quit(a.ctx)
-	})
+func (c *Core) emitUninstall(event UninstallEvent) {
+	c.emit("uninstall_progress", event)
 }
