@@ -53,3 +53,20 @@ f1f04586da69854a6e00f978dca5edb8318bd585f51aa88c5fd6ba9b0e3fbb65  x86/cygwin1.dl
 
 Indirect dependencies are listed in [`go.mod`](go.mod); their license files ship
 with each module in the Go module cache.
+
+## Android client (`android/`)
+
+The Android application links the following at build time.
+
+| Component | License |
+|---|---|
+| `gvisor.dev/gvisor` (userspace network stack) | Apache-2.0 |
+| `golang.org/x/net`, `golang.org/x/sys`, `golang.org/x/mobile` | BSD-3-Clause |
+| `github.com/google/btree`, `golang.org/x/exp`, `golang.org/x/time` | Apache-2.0 / BSD-3-Clause |
+| AndroidX, Jetpack Compose, Material 3 | Apache-2.0 |
+| Kotlin standard library | Apache-2.0 |
+
+The low-TTL fake and ClientHello split logic in
+[`android/core/glide/desync.go`](android/core/glide/desync.go) reimplements, in Go,
+the unprivileged desync approach of **byedpi** (https://github.com/hufrea/byedpi),
+which is licensed MIT. No byedpi source is copied.

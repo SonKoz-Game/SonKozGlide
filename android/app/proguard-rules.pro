@@ -1,0 +1,2 @@
+-keep class glide.** { *; }
+-keep class go.** { *; }

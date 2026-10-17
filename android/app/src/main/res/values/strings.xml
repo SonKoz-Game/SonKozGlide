@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SonKoz Glide</string>
+    <string name="tagline">Discord ve Roblox için hızlı bağlantı</string>
+    <string name="btn_off">Bağlan</string>
+    <string name="btn_on">Bağlı</string>
+    <string name="btn_opening">Açılıyor</string>
+    <string name="btn_closing">Kapanıyor</string>
+    <string name="btn_retry">Tekrar dene</string>
+    <string name="status_off">Bağlantı kapalı</string>
+    <string name="status_on">Bağlantı açık</string>
+    <string name="status_opening">Bağlantı açılıyor</string>
+    <string name="status_closing">Bağlantı kapanıyor</string>
+    <string name="status_error">Bağlantı kurulamadı</string>
+    <string name="method_prefix">Yöntem:</string>
+    <string name="notif_active">Bağlantı açık</string>
+</resources>
