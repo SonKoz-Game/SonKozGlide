@@ -25,12 +25,10 @@ class GlideVpnService : VpnService() {
         private const val CHANNEL_ID = "glide_vpn"
         private const val NOTIFICATION_ID = 1
 
-        private const val DNS_V4 = "198.18.255.254"
-        private const val DNS_V6 = "fd61:7363:6b6f:ffff::ffff"
-        private const val ADDR_V4 = "198.18.0.1"
-        private const val ADDR_V6 = "fd61:7363:6b6f::1"
-        private const val ROUTE_V4 = "198.18.0.0"
-        private const val ROUTE_V6 = "fd61:7363:6b6f::"
+        private const val DNS_V4 = "10.111.0.53"
+        private const val DNS_V6 = "fd00:5100:6b6f::53"
+        private const val ADDR_V4 = "10.111.0.1"
+        private const val ADDR_V6 = "fd00:5100:6b6f::1"
         private const val MTU = 1500
     }
 
@@ -55,8 +53,8 @@ class GlideVpnService : VpnService() {
                 .setMtu(MTU)
                 .addAddress(ADDR_V4, 32)
                 .addAddress(ADDR_V6, 128)
-                .addRoute(ROUTE_V4, 15)
-                .addRoute(ROUTE_V6, 48)
+                .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
                 .addDnsServer(DNS_V4)
                 .addDnsServer(DNS_V6)
             try {
@@ -68,8 +66,8 @@ class GlideVpnService : VpnService() {
 
             val opts = Options()
             opts.mtu = MTU.toLong()
-            opts.dnsFakeV4 = DNS_V4
-            opts.dnsFakeV6 = DNS_V6
+            opts.dnsV4 = DNS_V4
+            opts.dnsV6 = DNS_V6
             opts.verifyOnStart = true
 
             val logger = Logger { line ->

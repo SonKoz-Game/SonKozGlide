@@ -1,7 +1,6 @@
 package glide
 
 import (
-	"context"
 	"errors"
 	"net/netip"
 
@@ -50,16 +49,13 @@ func startTunStack(fd int, opts *Options, t *Tunnel) (*tunStack, error) {
 		{Destination: header.IPv6EmptySubnet, NIC: nicID},
 	})
 
-	dnsV4, _ := netip.ParseAddr(opts.DnsFakeV4)
-	dnsV6, _ := netip.ParseAddr(opts.DnsFakeV6)
-
 	tcpFwd := tcp.NewForwarder(s, tcpRcvWnd, tcpMaxInFlight, func(r *tcp.ForwarderRequest) {
-		t.handleTCP(s, r)
+		t.handleTCP(r)
 	})
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpFwd.HandlePacket)
 
 	udpFwd := udp.NewForwarder(s, func(r *udp.ForwarderRequest) bool {
-		return t.handleUDP(s, r, dnsV4, dnsV6)
+		return t.handleUDP(r)
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, udpFwd.HandlePacket)
 
@@ -70,19 +66,25 @@ func (ts *tunStack) close() {
 	ts.stack.Close()
 }
 
-func (t *Tunnel) handleTCP(s *stack.Stack, r *tcp.ForwarderRequest) {
+func (t *Tunnel) isDNS(addr netip.Addr) bool {
+	return addr == t.dnsV4 || addr == t.dnsV6
+}
+
+func (t *Tunnel) handleTCP(r *tcp.ForwarderRequest) {
 	id := r.ID()
-	fakeAddr, ok := netip.AddrFromSlice([]byte(id.LocalAddress.AsSlice()))
+	dst, ok := netip.AddrFromSlice(id.LocalAddress.AsSlice())
 	if !ok {
 		r.Complete(true)
 		return
 	}
-	fakeAddr = fakeAddr.Unmap()
-	name, found := t.fakePool.lookup(fakeAddr)
-	if !found {
+	dst = dst.Unmap()
+	port := int(id.LocalPort)
+
+	if t.isDNS(dst) && port != 53 {
 		r.Complete(true)
 		return
 	}
+
 	var wq waiter.Queue
 	epx, tcpErr := r.CreateEndpoint(&wq)
 	if tcpErr != nil {
@@ -92,38 +94,34 @@ func (t *Tunnel) handleTCP(s *stack.Stack, r *tcp.ForwarderRequest) {
 	r.Complete(false)
 	local := gonet.NewTCPConn(&wq, epx)
 	t.served.Add(1)
-	go t.pipeTCP(local, name, int(id.LocalPort))
+
+	if t.isDNS(dst) {
+		go t.serveDNSTCP(local)
+		return
+	}
+	go t.pipeTCP(local, dst, port)
 }
 
-func (t *Tunnel) handleUDP(s *stack.Stack, r *udp.ForwarderRequest, dnsV4, dnsV6 netip.Addr) bool {
+func (t *Tunnel) handleUDP(r *udp.ForwarderRequest) bool {
 	id := r.ID()
-	dst, ok := netip.AddrFromSlice([]byte(id.LocalAddress.AsSlice()))
+	dst, ok := netip.AddrFromSlice(id.LocalAddress.AsSlice())
 	if !ok {
 		return true
 	}
 	dst = dst.Unmap()
-	if id.LocalPort != 53 || (dst != dnsV4 && dst != dnsV6) {
-		return true
-	}
+	port := int(id.LocalPort)
+
 	var wq waiter.Queue
 	epx, tcpErr := r.CreateEndpoint(&wq)
 	if tcpErr != nil {
 		return true
 	}
 	conn := gonet.NewUDPConn(&wq, epx)
-	go t.serveDNSConn(conn)
-	return true
-}
 
-func (t *Tunnel) serveDNSConn(conn *gonet.UDPConn) {
-	defer conn.Close()
-	buf := make([]byte, 1500)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return
+	if t.isDNS(dst) && port == 53 {
+		go t.serveDNSUDP(conn)
+		return true
 	}
-	reply := t.handleDNS(context.Background(), buf[:n])
-	if reply != nil {
-		conn.Write(reply)
-	}
+	go t.relayUDP(conn, netip.AddrPortFrom(dst, uint16(port)))
+	return true
 }

@@ -11,6 +11,7 @@ import (
 const (
 	verifyHost    = "discord.com"
 	verifyTimeout = 6 * time.Second
+	verifySettle  = 2 * time.Second
 )
 
 type desyncConn struct {
@@ -32,10 +33,21 @@ func (c *desyncConn) Write(b []byte) (int, error) {
 }
 
 func (t *Tunnel) verify() {
-	ctx, cancel := context.WithTimeout(context.Background(), verifyTimeout*2)
-	ips, err := t.resolver.resolveA(ctx, verifyHost)
-	cancel()
-	if err != nil || len(ips) == 0 {
+	var ips []net.IP
+	for attempt := 0; attempt < 4; attempt++ {
+		if t.stopped.Load() {
+			return
+		}
+		time.Sleep(verifySettle)
+		ctx, cancel := context.WithTimeout(context.Background(), verifyTimeout*2)
+		resolved, err := t.resolver.resolveA(ctx, verifyHost)
+		cancel()
+		if err == nil && len(resolved) > 0 {
+			ips = resolved
+			break
+		}
+	}
+	if len(ips) == 0 {
 		t.logf("dogrulama: dns yaniti yok")
 		return
 	}

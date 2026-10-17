@@ -2,29 +2,21 @@ package glide
 
 import (
 	"context"
+	"encoding/binary"
+	"io"
+	"net"
+	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 )
 
+const dnsServeIdle = 10 * time.Second
+
 func (t *Tunnel) handleDNS(ctx context.Context, query []byte) []byte {
-	var parser dnsmessage.Parser
-	header, err := parser.Start(query)
-	if err != nil {
+	if len(query) < 12 {
 		return nil
 	}
-	question, err := parser.Question()
-	if err != nil {
-		return t.forwardDNS(ctx, query)
-	}
-	name := trimName(question.Name.String())
-	if (question.Type == dnsmessage.TypeA || question.Type == dnsmessage.TypeAAAA) && t.rules.match(name) {
-		pair := t.fakePool.assign(name)
-		return t.fakeReply(header, question, pair)
-	}
-	return t.forwardDNS(ctx, query)
-}
-
-func (t *Tunnel) forwardDNS(ctx context.Context, query []byte) []byte {
 	reply, err := t.resolver.exchange(ctx, query)
 	if err != nil {
 		return servFail(query)
@@ -32,47 +24,52 @@ func (t *Tunnel) forwardDNS(ctx context.Context, query []byte) []byte {
 	return reply
 }
 
-func (t *Tunnel) fakeReply(reqHeader dnsmessage.Header, question dnsmessage.Question, pair fakePair) []byte {
-	header := dnsmessage.Header{
-		ID:                 reqHeader.ID,
-		Response:           true,
-		OpCode:             reqHeader.OpCode,
-		RecursionDesired:   reqHeader.RecursionDesired,
-		RecursionAvailable: true,
-		RCode:              dnsmessage.RCodeSuccess,
-	}
-	builder := dnsmessage.NewBuilder(make([]byte, 0, 128), header)
-	builder.EnableCompression()
-	if builder.StartQuestions() != nil || builder.Question(question) != nil {
-		return nil
-	}
-	if builder.StartAnswers() != nil {
-		return nil
-	}
-	rh := dnsmessage.ResourceHeader{
-		Name:  question.Name,
-		Class: dnsmessage.ClassINET,
-		TTL:   60,
-	}
-	switch question.Type {
-	case dnsmessage.TypeA:
-		var a dnsmessage.AResource
-		copy(a.A[:], pair.v4.AsSlice())
-		if builder.AResource(rh, a) != nil {
-			return nil
+func (t *Tunnel) serveDNSUDP(conn *gonet.UDPConn) {
+	defer conn.Close()
+	buf := make([]byte, 1500)
+	for {
+		conn.SetReadDeadline(time.Now().Add(dnsServeIdle))
+		n, err := conn.Read(buf)
+		if n > 0 {
+			if reply := t.handleDNS(context.Background(), buf[:n]); reply != nil {
+				conn.SetWriteDeadline(time.Now().Add(dnsServeIdle))
+				conn.Write(reply)
+			}
 		}
-	case dnsmessage.TypeAAAA:
-		var aaaa dnsmessage.AAAAResource
-		copy(aaaa.AAAA[:], pair.v6.AsSlice())
-		if builder.AAAAResource(rh, aaaa) != nil {
-			return nil
+		if err != nil {
+			return
 		}
 	}
-	out, err := builder.Finish()
-	if err != nil {
-		return nil
+}
+
+func (t *Tunnel) serveDNSTCP(conn net.Conn) {
+	defer conn.Close()
+	header := make([]byte, 2)
+	for {
+		conn.SetReadDeadline(time.Now().Add(dnsServeIdle))
+		if _, err := io.ReadFull(conn, header); err != nil {
+			return
+		}
+		size := int(binary.BigEndian.Uint16(header))
+		if size == 0 || size > dnsMessageMax {
+			return
+		}
+		query := make([]byte, size)
+		if _, err := io.ReadFull(conn, query); err != nil {
+			return
+		}
+		reply := t.handleDNS(context.Background(), query)
+		if reply == nil {
+			return
+		}
+		out := make([]byte, 2+len(reply))
+		binary.BigEndian.PutUint16(out, uint16(len(reply)))
+		copy(out[2:], reply)
+		conn.SetWriteDeadline(time.Now().Add(dnsServeIdle))
+		if _, err := conn.Write(out); err != nil {
+			return
+		}
 	}
-	return out
 }
 
 func servFail(query []byte) []byte {
@@ -107,11 +104,4 @@ func servFail(query []byte) []byte {
 		return nil
 	}
 	return reply
-}
-
-func trimName(name string) string {
-	if len(name) > 0 && name[len(name)-1] == '.' {
-		return name[:len(name)-1]
-	}
-	return name
 }

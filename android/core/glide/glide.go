@@ -3,6 +3,7 @@ package glide
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,14 +14,12 @@ type Logger interface {
 }
 
 type Options struct {
-	DohServers   string
-	Domains      string
-	Strategy     string
-	Mtu          int
-	FakeV4Base   string
-	FakeV6Base   string
-	DnsFakeV4    string
-	DnsFakeV6    string
+	DohServers    string
+	Domains       string
+	Strategy      string
+	Mtu           int
+	DnsV4         string
+	DnsV6         string
 	VerifyOnStart bool
 }
 
@@ -28,8 +27,9 @@ type Tunnel struct {
 	stack    *tunStack
 	resolver *resolver
 	rules    *ruleSet
-	fakePool *fakePool
 	logger   Logger
+	dnsV4    netip.Addr
+	dnsV6    netip.Addr
 	strategy atomic.Value
 	served   atomic.Uint64
 	stopped  atomic.Bool
@@ -41,10 +41,8 @@ func defaultOptions() *Options {
 		DohServers:    "https://1.1.1.1/dns-query,https://8.8.8.8/dns-query",
 		Strategy:      "",
 		Mtu:           1500,
-		FakeV4Base:    "198.18.1.0",
-		FakeV6Base:    "fd61:7363:6b6f:1::",
-		DnsFakeV4:     "198.18.255.254",
-		DnsFakeV6:     "fd61:7363:6b6f:ffff::ffff",
+		DnsV4:         "10.111.0.53",
+		DnsV6:         "fd00:5100:6b6f::53",
 		VerifyOnStart: true,
 	}
 }
@@ -61,16 +59,21 @@ func Start(fd int, opts *Options, logger Logger) (*Tunnel, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool, err := newFakePool(base.FakeV4Base, base.FakeV6Base)
+	dnsV4, err := netip.ParseAddr(base.DnsV4)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("gecersiz dns v4")
+	}
+	dnsV6, err := netip.ParseAddr(base.DnsV6)
+	if err != nil {
+		return nil, errors.New("gecersiz dns v6")
 	}
 	res := newResolver(splitList(base.DohServers), logger)
 	t := &Tunnel{
 		resolver: res,
 		rules:    rules,
-		fakePool: pool,
 		logger:   logger,
+		dnsV4:    dnsV4,
+		dnsV6:    dnsV6,
 	}
 	t.setStrategyID(normalizeStrategy(base.Strategy))
 	st, err := startTunStack(fd, base, t)
@@ -140,17 +143,11 @@ func mergeOptions(dst *Options, src *Options) {
 	if src.Mtu > 0 {
 		dst.Mtu = src.Mtu
 	}
-	if src.FakeV4Base != "" {
-		dst.FakeV4Base = src.FakeV4Base
+	if src.DnsV4 != "" {
+		dst.DnsV4 = src.DnsV4
 	}
-	if src.FakeV6Base != "" {
-		dst.FakeV6Base = src.FakeV6Base
-	}
-	if src.DnsFakeV4 != "" {
-		dst.DnsFakeV4 = src.DnsFakeV4
-	}
-	if src.DnsFakeV6 != "" {
-		dst.DnsFakeV6 = src.DnsFakeV6
+	if src.DnsV6 != "" {
+		dst.DnsV6 = src.DnsV6
 	}
 	dst.VerifyOnStart = src.VerifyOnStart
 }

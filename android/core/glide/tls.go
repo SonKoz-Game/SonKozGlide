@@ -14,6 +14,14 @@ func splitPoint(data []byte, s strategy) int {
 	return 1
 }
 
+func sniHost(data []byte) (string, bool) {
+	off, ln, ok := sniLocation(data)
+	if !ok || ln <= 0 || off+ln > len(data) {
+		return "", false
+	}
+	return string(data[off : off+ln]), true
+}
+
 func sniLocation(data []byte) (int, int, bool) {
 	if len(data) < 43 || data[0] != 0x16 || data[5] != 0x01 {
 		return 0, 0, false
