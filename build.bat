@@ -29,7 +29,7 @@ taskkill /F /IM SonKozGlide.exe >nul 2>&1
 timeout /t 1 >nul
 
 echo [+] Wails Desktop Uygulamasi Derleniyor (Release)...
-wails build -ldflags="-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=v!APPVER!"
+wails build -platform windows/386 -ldflags="-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=v!APPVER!"
 if errorlevel 1 goto build_failed
 
 if not exist "build\bin\SonKozGlide.exe" goto build_failed
