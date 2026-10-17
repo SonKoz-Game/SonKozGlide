@@ -66,7 +66,7 @@ func GetBootInfo() BootInfo {
 	info.PlatformNames = append([]string(nil), bootStats.PlatformNames...)
 	bootMu.Unlock()
 
-	_, err := os.Stat(filepath.Join(getTargetDir(), "WinDivert64.sys"))
+	_, err := os.Stat(filepath.Join(getTargetDir(), driverFile()))
 	info.DriverReady = err == nil
 
 	start := time.Now()

@@ -48,3 +48,28 @@ func TestEmbeddedFileCompareStreamsAcrossChunks(t *testing.T) {
 		t.Fatal("rewriting over a longer stale file left different content")
 	}
 }
+
+func TestSetupCopiesOnlyTheNativeBinarySet(t *testing.T) {
+	useTempTargetDir(t)
+	other := archX86
+	if nativeArch == archX86 {
+		other = archX64
+	}
+	source := fstest.MapFS{
+		"resources/" + nativeArch + "/winws.exe":          {Data: []byte("native")},
+		"resources/" + nativeArch + "/" + driverFile():    {Data: []byte("driver")},
+		"resources/" + other + "/" + driverFileFor(other): {Data: []byte("other")},
+	}
+	if err := Setup(source); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(getTargetDir(), "winws.exe")); err != nil || string(data) != "native" {
+		t.Fatalf("winws.exe = %q, %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(getTargetDir(), driverFileFor(other))); err == nil {
+		t.Fatal("the driver for the other architecture must not be installed")
+	}
+	if !GetBootInfo().DriverReady {
+		t.Fatal("the native driver must be reported as ready")
+	}
+}

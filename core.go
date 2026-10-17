@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/xml"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf16"
 
 	"github.com/SonKoz-Game/SonKozGlide/internal/engine"
 	"github.com/SonKoz-Game/SonKozGlide/internal/settings"
@@ -61,6 +63,7 @@ const (
 	autoStartTaskName     = "SonKozGlide"
 	autoStartRegistryName = "SonKozGlide"
 	runRegistryPath       = `Software\Microsoft\Windows\CurrentVersion\Run`
+	autoStartTaskPriority = "4"
 )
 
 func NewCore(resources embed.FS, rulesYAML []byte) *Core {
@@ -407,7 +410,13 @@ func (c *Core) SetAutoStart(enable bool) string {
 
 func (c *Core) migrateLegacyAutoStart() {
 	exePath, err := currentExecutablePath()
-	if err != nil || autoStartTaskMatches(exePath) {
+	if err != nil {
+		return
+	}
+	if autoStartTaskMatches(exePath) {
+		if !autoStartTaskCurrent(exePath) {
+			_ = createAutoStartTask(exePath)
+		}
 		return
 	}
 
@@ -430,17 +439,100 @@ func currentExecutablePath() (string, error) {
 }
 
 func createAutoStartTask(exePath string) error {
-	taskCommand := `"` + exePath + `" -hide`
-	_, err := runHiddenOutput(
-		"schtasks",
-		"/Create",
-		"/TN", autoStartTaskName,
-		"/TR", taskCommand,
-		"/SC", "ONLOGON",
-		"/RL", "HIGHEST",
-		"/F",
-	)
+	user, err := currentUserSID()
+	if err != nil {
+		return err
+	}
+	xmlPath := filepath.Join(os.TempDir(), "SonKozGlide_task.xml")
+	if err := os.WriteFile(xmlPath, utf16File(autoStartTaskXML(exePath, user)), 0600); err != nil {
+		return err
+	}
+	defer os.Remove(xmlPath)
+
+	_, err = runHiddenOutput("schtasks", "/Create", "/TN", autoStartTaskName, "/XML", xmlPath, "/F")
 	return err
+}
+
+func autoStartTaskXML(exePath string, userSID string) string {
+	return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <URI>\` + autoStartTaskName + `</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>` + xmlEscape(userSID) + `</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>` + xmlEscape(userSID) + `</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>` + autoStartTaskPriority + `</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>` + xmlEscape(exePath) + `</Command>
+      <Arguments>-hide</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+`
+}
+
+func xmlEscape(value string) string {
+	var b strings.Builder
+	_ = xml.EscapeText(&b, []byte(value))
+	return b.String()
+}
+
+func utf16File(text string) []byte {
+	units := utf16.Encode([]rune(text))
+	out := make([]byte, 2+2*len(units))
+	out[0], out[1] = 0xFF, 0xFE
+	for i, u := range units {
+		out[2+2*i] = byte(u)
+		out[3+2*i] = byte(u >> 8)
+	}
+	return out
+}
+
+func currentUserSID() (string, error) {
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return "", err
+	}
+	return user.User.Sid.String(), nil
+}
+
+func autoStartTaskCurrent(exePath string) bool {
+	output, err := runHiddenOutput("schtasks", "/Query", "/TN", autoStartTaskName, "/XML")
+	if err != nil {
+		return false
+	}
+	return (commandReferencesExecutable(output, exePath) || commandReferencesExecutable(output, xmlEscape(exePath))) &&
+		strings.Contains(output, "<Priority>"+autoStartTaskPriority+"</Priority>") &&
+		strings.Contains(output, "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>")
 }
 
 func deleteAutoStartTask() error {

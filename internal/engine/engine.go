@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -448,7 +447,7 @@ func IsProcessRunning() bool {
 	return isActivePhase(currentPhase)
 }
 
-func Setup(embeddedFiles embed.FS) error {
+func Setup(embeddedFiles fs.FS) error {
 	started := time.Now()
 	targetDir := getTargetDir()
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -458,7 +457,8 @@ func Setup(embeddedFiles embed.FS) error {
 	pathPtr, _ := syscall.UTF16PtrFromString(targetDir)
 	_ = syscall.SetFileAttributes(pathPtr, syscall.FILE_ATTRIBUTE_HIDDEN)
 
-	files, err := fs.ReadDir(embeddedFiles, "resources")
+	sourceDir := "resources/" + nativeArch
+	files, err := fs.ReadDir(embeddedFiles, sourceDir)
 	if err != nil {
 		return err
 	}
@@ -467,11 +467,14 @@ func Setup(embeddedFiles embed.FS) error {
 	components := make([]BootFile, 0, len(files))
 	buffers := make([]byte, 2*setupChunkSize)
 	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
 		info, err := file.Info()
 		if err != nil {
 			continue
 		}
-		source := "resources/" + file.Name()
+		source := sourceDir + "/" + file.Name()
 		destPath := filepath.Join(targetDir, file.Name())
 		if sameEmbeddedFile(embeddedFiles, source, destPath, info.Size(), buffers) {
 			components = append(components, BootFile{Name: file.Name(), Bytes: info.Size()})
@@ -489,7 +492,9 @@ func Setup(embeddedFiles embed.FS) error {
 	}
 	_ = os.Remove(filepath.Join(targetDir, legacyBrokerExe))
 
-	recordSetupStats(components, updated, time.Since(started))
+	took := time.Since(started)
+	recordSetupStats(components, updated, took)
+	appendEngineLog(fmt.Sprintf("setup: %d files, %d updated in %dms (process up %dms)", len(components), updated, took.Milliseconds(), processUptime().Milliseconds()))
 	return nil
 }
 

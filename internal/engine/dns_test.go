@@ -3,6 +3,7 @@ package engine
 import (
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestPSServerListQuotesAndFilters(t *testing.T) {
@@ -116,6 +117,7 @@ type dnsStub struct {
 	applied  [][]int
 	restored int
 	verifyOK bool
+	failSets int
 }
 
 func installDNSStub(t *testing.T, stub *dnsStub) {
@@ -134,6 +136,10 @@ func installDNSStub(t *testing.T, stub *dnsStub) {
 			ok[iface.Index] = true
 		}
 		stub.applied = append(stub.applied, indexes)
+		if stub.failSets > 0 {
+			stub.failSets--
+			return map[int]bool{}
+		}
 		return ok
 	}
 	dnsServerRestorer = func([]dnsInterfaceBackup) { stub.restored++ }
@@ -148,6 +154,7 @@ func installDNSStub(t *testing.T, stub *dnsStub) {
 		dnsMu.Lock()
 		dnsWanted, dnsTemplatesOn, dnsAttempted, dnsAttemptSig = false, false, false, ""
 		dnsAppliedIfaces = map[int]bool{}
+		dnsApplyFailures = 0
 		dnsMu.Unlock()
 		setDNSFinding(nil)
 	})
@@ -239,6 +246,56 @@ func TestRestoreIfUnwantedLeavesAWantedSetupAlone(t *testing.T) {
 	restoreDNSIfUnwanted()
 	if stub.restored != 1 {
 		t.Fatalf("an unwanted setup must be restored, restored %d times", stub.restored)
+	}
+}
+
+func TestEncryptedDNSRetriesWhenTheSystemRefusesTheChange(t *testing.T) {
+	stub := &dnsStub{ifaces: []netInterface{{Index: 6, Alias: "Ethernet"}}, verifyOK: true, failSets: 1}
+	installDNSStub(t, stub)
+
+	applyEncryptedDNS()
+	if len(stub.applied) != 1 {
+		t.Fatalf("expected one failed attempt, applied %v", stub.applied)
+	}
+
+	refreshEncryptedDNSIfNetworkChanged()
+	waitForDNSRefresh(t)
+	if len(stub.applied) != 2 || len(dnsAppliedIfaces) != 1 {
+		t.Fatalf("a set that failed at boot must be retried on the next tick, applied %v", stub.applied)
+	}
+
+	refreshEncryptedDNSIfNetworkChanged()
+	waitForDNSRefresh(t)
+	if len(stub.applied) != 2 {
+		t.Fatalf("a working setup must not be re-applied, applied %v", stub.applied)
+	}
+}
+
+func TestEncryptedDNSRetriesAreBounded(t *testing.T) {
+	stub := &dnsStub{ifaces: []netInterface{{Index: 6, Alias: "Ethernet"}}, verifyOK: true, failSets: 100}
+	installDNSStub(t, stub)
+
+	applyEncryptedDNS()
+	for i := 0; i < dnsApplyRetryLimit+3; i++ {
+		refreshEncryptedDNSIfNetworkChanged()
+		waitForDNSRefresh(t)
+	}
+	if len(stub.applied) != dnsApplyRetryLimit+1 {
+		t.Fatalf("expected %d attempts, got %d", dnsApplyRetryLimit+1, len(stub.applied))
+	}
+}
+
+func TestDNSInterfaceSettingsLayout(t *testing.T) {
+	var s dnsInterfaceSettings
+	if unsafe.Offsetof(s.FlagsLow) != 8 {
+		t.Fatalf("Flags must sit at offset 8 like ULONG64 in DNS_INTERFACE_SETTINGS, got %d", unsafe.Offsetof(s.FlagsLow))
+	}
+	ptr := unsafe.Sizeof(uintptr(0))
+	if unsafe.Offsetof(s.NameServer) != 16+ptr {
+		t.Fatalf("NameServer at %d", unsafe.Offsetof(s.NameServer))
+	}
+	if unsafe.Offsetof(s.ProfileNameServer) != 16+3*ptr+16 {
+		t.Fatalf("ProfileNameServer at %d", unsafe.Offsetof(s.ProfileNameServer))
 	}
 }
 

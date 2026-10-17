@@ -34,20 +34,30 @@ jobs:
           }
 
       - name: Test
-        run: go test ./internal/...
+        shell: pwsh
+        run: |
+          go test ./internal/...
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:GOARCH = "386"
+          go test ./internal/...
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
       - name: Build
         shell: pwsh
-        run: wails build -ldflags "-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=${{ github.ref_name }}"
+        run: |
+          wails build -platform windows/amd64 -ldflags "-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=${{ github.ref_name }}"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          wails build -platform windows/386 -o SonKozGlide_x86.exe -ldflags "-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=${{ github.ref_name }}"
 
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build/bin/SonKozGlide.exe dist/SonKozGlide_windows_amd64.exe
+          Copy-Item build/bin/SonKozGlide_x86.exe dist/SonKozGlide_windows_386.exe
           Compress-Archive -Path LICENSE, THIRD_PARTY_NOTICES.md, licenses -DestinationPath dist/licenses.zip
           $lines = Get-ChildItem dist -File | Sort-Object Name | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name

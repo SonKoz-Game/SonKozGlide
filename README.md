@@ -39,7 +39,8 @@ Discord, Roblox, OpenAI, Telegram, YouTube ve Meta (Instagram, WhatsApp).
 ## Kullanım
 
 1. [Releases](https://github.com/SonKoz-Game/SonKozGlide/releases) sayfasından
-   `SonKozGlide_windows_amd64.exe` dosyasını indirin. Her release'te SHA-256
+   `SonKozGlide_windows_amd64.exe` dosyasını indirin (32-bit Windows için
+   `SonKozGlide_windows_386.exe`). Her release'te SHA-256
    özetleri `checksums.txt` içinde yer alır; uygulama içi güncelleme de bu
    dosyayla doğrulanır.
 2. Çalıştırın (WinDivert sürücüsü için yönetici izni gerekir).
@@ -171,10 +172,11 @@ sırasında uygulamayı yönetici olarak başlatın.
    ```
 
 [Release iş akışı](.github/workflows/release.yml) etiketi `wails.json` ile
-karşılaştırır, testleri çalıştırır, EXE'yi derler ve release'e
-`SonKozGlide_windows_amd64.exe`, `checksums.txt` ve `licenses.zip` dosyalarını
-ekler. Güncelleyici yalnızca `windows_amd64.exe` ile biten dosyaları tanır; dosya
-adını değiştirmeyin.
+karşılaştırır, testleri iki mimaride çalıştırır, EXE'leri derler ve release'e
+`SonKozGlide_windows_amd64.exe`, `SonKozGlide_windows_386.exe`, `checksums.txt`
+ve `licenses.zip` dosyalarını ekler. Güncelleyici her EXE'yi kendi mimarisinin
+dosyasıyla günceller (`windows_amd64.exe` / `windows_386.exe` ile biten adlar);
+dosya adlarını değiştirmeyin.
 
 ### Proje yapısı
 

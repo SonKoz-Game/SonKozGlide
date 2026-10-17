@@ -12,20 +12,25 @@ These files are embedded into `SonKozGlide.exe` and extracted to
 | File | Component | License | Upstream |
 |---|---|---|---|
 | `winws.exe` | zapret (winws, Windows build) — Copyright (c) 2016-2024 bol-van | MIT — [`licenses/zapret-MIT.txt`](licenses/zapret-MIT.txt) | https://github.com/bol-van/zapret |
-| `WinDivert.dll`, `WinDivert64.sys` | WinDivert 2.2.2 — Copyright © Basil 2011-2022 | LGPL-3.0 or GPL-2.0 — [`licenses/WinDivert-LICENSE.txt`](licenses/WinDivert-LICENSE.txt) | https://github.com/basil00/WinDivert |
-| `cygwin1.dll` | Cygwin 3.4.10 — Copyright © Cygwin Authors 1996-2023 | LGPL-3.0-or-later — [`licenses/LGPL-3.0.txt`](licenses/LGPL-3.0.txt), [`licenses/GPL-3.0.txt`](licenses/GPL-3.0.txt) | https://cygwin.com/licensing.html |
+| `WinDivert.dll`, `WinDivert64.sys` (x64), `WinDivert32.sys` (x86) | WinDivert 2.2.2 — Copyright © Basil 2011-2022 | LGPL-3.0 or GPL-2.0 — [`licenses/WinDivert-LICENSE.txt`](licenses/WinDivert-LICENSE.txt) | https://github.com/basil00/WinDivert |
+| `cygwin1.dll` | Cygwin 3.4.10 (x64), Cygwin 3.3.6 (x86) — Copyright © Cygwin Authors 1996-2023 | LGPL-3.0-or-later — [`licenses/LGPL-3.0.txt`](licenses/LGPL-3.0.txt), [`licenses/GPL-3.0.txt`](licenses/GPL-3.0.txt) | https://cygwin.com/licensing.html |
 
 Corresponding source for the LGPL components is available from their upstream
 projects: WinDivert 2.2.2 at https://github.com/basil00/WinDivert/tree/v2.2.2 and
-Cygwin 3.4.10 at https://github.com/cygwin/cygwin/tree/cygwin-3.4.10.
+Cygwin 3.4.10 at https://github.com/cygwin/cygwin/tree/cygwin-3.4.10 and
+Cygwin 3.3.6 at https://github.com/cygwin/cygwin/tree/cygwin-3_3_6-release.
 
 SHA-256 of the bundled files:
 
 ```
-2da71e80878dc270ac83f5893ecbb841f9752a57f1da8ff9325636b4346bc632  winws.exe
-c1e060ee19444a259b2162f8af0f3fe8c4428a1c6f694dce20de194ac8d7d9a2  WinDivert.dll
-8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2  WinDivert64.sys
-103104a52e5293ce418944725df19e2bf81ad9269b9a120d71d39028e821499b  cygwin1.dll
+2da71e80878dc270ac83f5893ecbb841f9752a57f1da8ff9325636b4346bc632  x64/winws.exe
+c1e060ee19444a259b2162f8af0f3fe8c4428a1c6f694dce20de194ac8d7d9a2  x64/WinDivert.dll
+8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2  x64/WinDivert64.sys
+103104a52e5293ce418944725df19e2bf81ad9269b9a120d71d39028e821499b  x64/cygwin1.dll
+b54ab3b4229534675fe306d71585e2eb876f13f826385862e0fc3da9a6d8c4a8  x86/winws.exe
+a321649090c21aaa7529ce5d019d242b1d5f2a2aff04bc3224db409641604a83  x86/WinDivert.dll
+2f43f4251be4d72dd56c91bf6cce475d379eb9ba6c4dda2be3022ea633d5e807  x86/WinDivert32.sys
+f1f04586da69854a6e00f978dca5edb8318bd585f51aa88c5fd6ba9b0e3fbb65  x86/cygwin1.dll
 ```
 
 ## Frontend assets (installed with npm)

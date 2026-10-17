@@ -112,3 +112,11 @@ func isProcessAlive(cmd *exec.Cmd) bool {
 
 	return status == uint32(windows.WAIT_TIMEOUT)
 }
+
+func processUptime() time.Duration {
+	var creation, exit, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(windows.CurrentProcess(), &creation, &exit, &kernel, &user); err != nil {
+		return 0
+	}
+	return time.Since(time.Unix(0, creation.Nanoseconds()))
+}

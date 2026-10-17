@@ -26,20 +26,27 @@ echo.
 
 echo [+] Arka plandaki eski surumler kapatiliyor...
 taskkill /F /IM SonKozGlide.exe >nul 2>&1
+taskkill /F /IM SonKozGlide_x86.exe >nul 2>&1
 timeout /t 1 >nul
 
-echo [+] Wails Desktop Uygulamasi Derleniyor (Release)...
-wails build -ldflags="-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=v!APPVER!"
+set "LDFLAGS=-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=v!APPVER!"
+
+echo [+] 64-bit surum derleniyor (windows/amd64)...
+wails build -platform windows/amd64 -ldflags="!LDFLAGS!"
 if errorlevel 1 goto build_failed
-
 if not exist "build\bin\SonKozGlide.exe" goto build_failed
-
-echo [+] Taze uretilen EXE ana klasore tasiniyor...
 move /Y "build\bin\SonKozGlide.exe" ".\"
 if errorlevel 1 goto build_failed
 
+echo [+] 32-bit surum derleniyor (windows/386)...
+wails build -platform windows/386 -o SonKozGlide_x86.exe -ldflags="!LDFLAGS!"
+if errorlevel 1 goto build_failed
+if not exist "build\bin\SonKozGlide_x86.exe" goto build_failed
+move /Y "build\bin\SonKozGlide_x86.exe" ".\"
+if errorlevel 1 goto build_failed
+
 echo.
-echo [OK] Basariyla derlendi: SonKozGlide.exe   surum v!APPVER!
+echo [OK] Basariyla derlendi: SonKozGlide.exe ve SonKozGlide_x86.exe   surum v!APPVER!
 echo [OK] Uygulama bu klasorde hazir, cift tiklayinca pencereli modern arayuz acilacak!
 echo.
 pause

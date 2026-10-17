@@ -13,9 +13,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-//go:embed resources/*
-var embeddedFiles embed.FS
-
 //go:embed rules/rules.yaml
 var rulesYAML []byte
 
@@ -57,6 +54,9 @@ func runCore() {
 		return
 	}
 	defer windows.CloseHandle(handle)
+	if background {
+		_ = windows.SetPriorityClass(windows.CurrentProcess(), windows.NORMAL_PRIORITY_CLASS)
+	}
 
 	showRequests, showErr := createShowEvent()
 

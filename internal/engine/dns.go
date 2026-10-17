@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -21,6 +22,7 @@ const (
 	dnsVerifyAttempts      = 2
 	dnsVerifySlowThreshold = 1200 * time.Millisecond
 	dnsFindingName         = "Guvenli DNS"
+	dnsApplyRetryLimit     = 4
 )
 
 var dnsVerifyTargets = []string{"www.microsoft.com", "www.cloudflare.com"}
@@ -47,6 +49,7 @@ var (
 	dnsAppliedIfaces = map[int]bool{}
 	dnsAttempted     bool
 	dnsAttemptSig    string
+	dnsApplyFailures int
 	dnsRefreshBusy   atomic.Bool
 
 	dnsVerifier        = measureSystemResolution
@@ -148,8 +151,14 @@ func ensureEncryptedDNS() {
 	if len(dnsAppliedIfaces) == 0 {
 		appendEngineLog("dns: could not apply encrypted DNS on any interface")
 		restoreDNSLocked()
+		if dnsApplyFailures < dnsApplyRetryLimit {
+			dnsApplyFailures++
+			dnsAttempted = true
+			appendEngineLog(fmt.Sprintf("dns: will retry (%d/%d)", dnsApplyFailures, dnsApplyRetryLimit))
+		}
 		return
 	}
+	dnsApplyFailures = 0
 	if len(applied) == 0 {
 		return
 	}
@@ -293,6 +302,7 @@ func RestoreDNS() {
 	dnsMu.Lock()
 	defer dnsMu.Unlock()
 
+	dnsApplyFailures = 0
 	restoreDNSLocked()
 }
 
@@ -334,6 +344,29 @@ func restoreDNSLocked() {
 }
 
 func applyDNSServers(ifaces []netInterface) map[int]bool {
+	applied := make(map[int]bool)
+	var fallback []netInterface
+	for _, iface := range ifaces {
+		err := applyDNSServersNative(iface)
+		if err == nil {
+			applied[iface.Index] = true
+			continue
+		}
+		if !errors.Is(err, errNativeDNSUnavailable) {
+			appendEngineLog(fmt.Sprintf("dns: native set failed on %d: %v", iface.Index, err))
+		}
+		fallback = append(fallback, iface)
+	}
+	if len(fallback) == 0 {
+		return applied
+	}
+	for index := range applyDNSServersPS(fallback) {
+		applied[index] = true
+	}
+	return applied
+}
+
+func applyDNSServersPS(ifaces []netInterface) map[int]bool {
 	dualStack := psServerList(dnsServerCSV(true))
 	v4Only := psServerList(dnsServerCSV(false))
 
@@ -358,6 +391,21 @@ func applyDNSServers(ifaces []netInterface) map[int]bool {
 }
 
 func restoreDNSServers(ifaces []dnsInterfaceBackup) {
+	var fallback []dnsInterfaceBackup
+	for _, iface := range ifaces {
+		err := restoreDNSServersNative(iface)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, errNativeDNSUnavailable) {
+			appendEngineLog(fmt.Sprintf("dns: native restore failed on %d: %v", iface.Index, err))
+		}
+		fallback = append(fallback, iface)
+	}
+	restoreDNSServersPS(fallback)
+}
+
+func restoreDNSServersPS(ifaces []dnsInterfaceBackup) {
 	if len(ifaces) == 0 {
 		return
 	}
@@ -385,7 +433,7 @@ func restoreDNSServers(ifaces []dnsInterfaceBackup) {
 }
 
 func psBatchTimeout(count int) time.Duration {
-	return 6*time.Second + time.Duration(count)*4*time.Second
+	return 20*time.Second + time.Duration(count)*5*time.Second
 }
 
 func parseIndexResults(out string) (map[int]bool, []string) {
@@ -413,15 +461,21 @@ func configureDoHTemplates(enable bool) {
 		auto = "yes"
 	}
 	servers := append(append([]dohServer{}, encryptedDNSServers...), encryptedDNSServersV6...)
+	var wg sync.WaitGroup
 	for _, server := range servers {
-		runHidden(4*time.Second, "netsh", "dns", "delete", "encryption", "server="+server.IP)
-		runHidden(4*time.Second, "netsh", "dns", "add", "encryption",
-			"server="+server.IP,
-			"dohtemplate="+server.Template,
-			"autoupgrade="+auto,
-			"udpfallback=no",
-		)
+		wg.Add(1)
+		go func(server dohServer) {
+			defer wg.Done()
+			runHidden(8*time.Second, "netsh", "dns", "delete", "encryption", "server="+server.IP)
+			runHidden(8*time.Second, "netsh", "dns", "add", "encryption",
+				"server="+server.IP,
+				"dohtemplate="+server.Template,
+				"autoupgrade="+auto,
+				"udpfallback=no",
+			)
+		}(server)
 	}
+	wg.Wait()
 }
 
 func flushSystemDNSCache() {
