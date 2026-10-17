@@ -1,6 +1,13 @@
-### Kurulum
+### Hangi dosyayı indirmeliyim?
 
-`SonKozGlide_windows_amd64.exe` dosyasını indirip çalıştırın (Windows 10/11, yönetici izni gerekir).
+| Bilgisayarın | İndir |
+|---|---|
+| Windows 10/11, 64 bit (neredeyse tüm bilgisayarlar) | **SonKoz Glide · Windows 64 bit (önerilen)** |
+| Windows 10, 32 bit (eski bilgisayarlar) | **SonKoz Glide · Windows 32 bit** |
+
+Emin değilsen: **Ayarlar → Sistem → Hakkında → Sistem türü**. "64 bit işletim sistemi" yazıyorsa 64 bit sürümü indir. Yanlış seçsen de sorun olmaz: 32 bit sürüm 64 bit Windows'ta da çalışır.
+
+Uygulamayı çalıştırmak yönetici izni ister.
 
 Windows ilk açılışta **"Windows kişisel bilgisayarınızı korudu"** uyarısı gösterebilir. Bunun nedeni dosyanın ücretli bir kod imzalama sertifikasıyla imzalanmamış olması ve yeni bir sürüm olarak henüz yeterince indirilmemesidir; dosyanın zararlı olduğu anlamına gelmez. Devam etmek için **Ek bilgi → Yine de çalıştır**. Uygulama içinden yapılan güncellemelerde bu uyarı tekrar çıkmaz.
 

@@ -176,7 +176,9 @@ karşılaştırır, testleri iki mimaride çalıştırır, EXE'leri derler ve re
 `SonKozGlide_windows_amd64.exe`, `SonKozGlide_windows_386.exe`, `checksums.txt`
 ve `licenses.zip` dosyalarını ekler. Güncelleyici her EXE'yi kendi mimarisinin
 dosyasıyla günceller (`windows_amd64.exe` / `windows_386.exe` ile biten adlar);
-dosya adlarını değiştirmeyin.
+dosya adlarını değiştirmeyin: kurulu kopyalar eski adı taşıyan son sürümde
+takılı kalır. Release sayfasında kullanıcıya görünen adlar ("Windows 64 bit",
+"Windows 32 bit") iş akışındaki asset etiketlerinden gelir.
 
 ### Proje yapısı
 
