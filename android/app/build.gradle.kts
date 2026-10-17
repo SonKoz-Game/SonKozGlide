@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseKeystore: String? = System.getenv("SK_KEYSTORE")
+val glideVersionName = (project.findProperty("glideVersionName") as String?) ?: "1.0.0"
+val glideVersionCode = (project.findProperty("glideVersionCode") as String?)?.toInt() ?: 1
+
 android {
     namespace = "com.sonkoz.glide"
     compileSdk = 36
@@ -12,17 +16,40 @@ android {
         applicationId = "com.sonkoz.glide"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        versionCode = glideVersionCode
+        versionName = glideVersionName
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("SK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SK_KEY_ALIAS")
+                keyPassword = System.getenv("SK_KEY_PASSWORD")
+            }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -40,6 +67,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

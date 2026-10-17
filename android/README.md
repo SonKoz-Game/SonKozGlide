@@ -22,10 +22,23 @@ Roblox engellerini aşan Android istemcisi.
 cd android
 ./build-aar.sh
 
-# 2) APK üret
-./gradlew assembleDebug
-# çıktı: app/build/outputs/apk/debug/app-debug.apk
+# 2) APK üret (mimariye göre ayrı, küçültülmüş dosyalar)
+./gradlew assembleRelease
+# çıktı: app/build/outputs/apk/release/app-arm64-v8a-release.apk (~4 MB)
 ```
+
+`SK_KEYSTORE` ortam değişkeni yoksa yerel release derlemesi debug anahtarıyla
+imzalanır; bu dosyalar yalnızca deneme içindir.
+
+## Sürüm yayınlama
+
+Sürüm anahtarı bir kez `android/release-key.ps1` ile oluşturulur ve GitHub
+secret'larına yazılır (`SK_KEYSTORE_B64`, `SK_KEYSTORE_PASSWORD`, `SK_KEY_ALIAS`,
+`SK_KEY_PASSWORD`). Anahtar `%USERPROFILE%\.sonkoz\glide-release.jks` dosyasında
+durur; yedeklenmeli, kaybolursa Android sürümü güncellenemez.
+
+`v*` etiketi atıldığında `release.yml` Android APK'larını da derler ve sürüme
+`SonKozGlide_android_arm64.apk` ile `SonKozGlide_android_armv7.apk` olarak ekler.
 
 Gereksinimler: Android SDK (platform 36, build-tools 36.1.0), NDK (28.x),
 JDK 17, Go 1.27+ ve `gomobile`/`gobind` (`go install golang.org/x/mobile/cmd/...@latest`).

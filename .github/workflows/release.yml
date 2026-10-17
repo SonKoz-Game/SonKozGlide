@@ -10,7 +10,80 @@ permissions:
   attestations: write
 
 jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: android/core/go.mod
+          cache-dependency-path: android/core/go.sum
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Install gomobile
+        working-directory: android/core
+        run: |
+          version=$(go list -m -f '{{.Version}}' golang.org/x/mobile)
+          go install "golang.org/x/mobile/cmd/gomobile@$version" "golang.org/x/mobile/cmd/gobind@$version"
+
+      - name: Release key
+        env:
+          SK_KEYSTORE_B64: ${{ secrets.SK_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$SK_KEYSTORE_B64" ]; then
+            echo "SK_KEYSTORE_B64 secret is missing" >&2
+            exit 1
+          fi
+          echo "$SK_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SK_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: android
+        env:
+          SK_KEYSTORE_PASSWORD: ${{ secrets.SK_KEYSTORE_PASSWORD }}
+          SK_KEY_ALIAS: ${{ secrets.SK_KEY_ALIAS }}
+          SK_KEY_PASSWORD: ${{ secrets.SK_KEY_PASSWORD }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          IFS=. read -r major minor patch <<< "$version"
+          code=$((major * 10000 + minor * 100 + patch))
+          ./build-aar.sh
+          ./gradlew --no-daemon assembleRelease -PglideVersionName="$version" -PglideVersionCode="$code"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          out=android/app/build/outputs/apk/release
+          cp "$out/app-arm64-v8a-release.apk" dist/SonKozGlide_android_arm64.apk
+          cp "$out/app-armeabi-v7a-release.apk" dist/SonKozGlide_android_armv7.apk
+          for apk in dist/*.apk; do
+            certs=$("$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$apk")
+            if grep -q "CN=Android Debug" <<< "$certs"; then
+              echo "$apk is signed with the debug key" >&2
+              exit 1
+            fi
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: dist/*.apk
+          if-no-files-found: error
+
   release:
+    needs: android
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +125,11 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           wails build -platform windows/386 -o SonKozGlide_x86.exe -ldflags "-s -w -H windowsgui -X github.com/SonKoz-Game/SonKozGlide/internal/updater.Version=${{ github.ref_name }}"
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: android
+          path: dist
+
       - name: Package
         shell: pwsh
         run: |
@@ -76,6 +154,8 @@ jobs:
           $assets = @(
             "dist/SonKozGlide_windows_amd64.exe#SonKoz Glide · Windows 64 bit (önerilen)",
             "dist/SonKozGlide_windows_386.exe#SonKoz Glide · Windows 32 bit (eski bilgisayarlar)",
+            "dist/SonKozGlide_android_arm64.apk#SonKoz Glide · Android (önerilen)",
+            "dist/SonKozGlide_android_armv7.apk#SonKoz Glide · Android 32 bit (eski telefonlar)",
             "dist/checksums.txt#checksums.txt (SHA-256 özetleri)",
             "dist/licenses.zip#licenses.zip (lisans metinleri)"
           )
