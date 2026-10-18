@@ -8,16 +8,20 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import glide.Glide
 import glide.Logger
 import glide.Options
 import glide.Tunnel
+import java.util.TimeZone
 
 class GlideVpnService : VpnService() {
 
     private var tun: ParcelFileDescriptor? = null
-    private var tunnel: Tunnel? = null
+    @Volatile private var tunnel: Tunnel? = null
+    private val worker = HandlerThread("glide-lifecycle").apply { start() }
+    private val lifecycle by lazy { android.os.Handler(worker.looper) }
 
     companion object {
         const val ACTION_START = "com.sonkoz.glide.START"
@@ -46,8 +50,13 @@ class GlideVpnService : VpnService() {
     private fun start() {
         if (tunnel != null) return
         GlideState.setPhase(Phase.ACILIYOR)
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(NOTIFICATION_ID, buildNotification(Phase.ACILIYOR))
+        lifecycle.post { bringUp() }
+    }
+
+    private fun bringUp() {
         try {
+            applyLocalZone()
             val builder = Builder()
                 .setSession(getString(R.string.app_name))
                 .setMtu(MTU)
@@ -77,41 +86,77 @@ class GlideVpnService : VpnService() {
             tunnel = Glide.start(pfd.detachFd().toLong(), opts, logger)
             GlideState.setStrategy(tunnel?.activeStrategy() ?: "")
             GlideState.setPhase(Phase.ACIK)
+            updateNotification(Phase.ACIK)
         } catch (e: Exception) {
             GlideState.setDetail(e.message ?: "hata")
+            tunnel = null
+            closeTun()
             GlideState.setPhase(Phase.HATA)
-            stop()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
     private fun stop() {
+        if (tunnel == null && tun == null) {
+            GlideState.setPhase(Phase.KAPALI)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         GlideState.setPhase(Phase.KAPANIYOR)
-        tunnel?.stop()
+        updateNotification(Phase.KAPANIYOR)
+        val t = tunnel
         tunnel = null
+        lifecycle.post {
+            t?.stop()
+            closeTun()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            GlideState.setPhase(Phase.KAPALI)
+        }
+    }
+
+    private fun closeTun() {
         try {
             tun?.close()
         } catch (_: Exception) {
         }
         tun = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
-        GlideState.setPhase(Phase.KAPALI)
+    }
+
+    override fun onRevoke() {
+        stop()
     }
 
     override fun onDestroy() {
-        tunnel?.stop()
+        val t = tunnel
         tunnel = null
-        try {
-            tun?.close()
-        } catch (_: Exception) {
-        }
+        t?.stop()
+        closeTun()
+        worker.quitSafely()
         super.onDestroy()
     }
 
-    private fun buildNotification(): Notification {
+    private fun applyLocalZone() {
+        try {
+            val tz = TimeZone.getDefault()
+            val offset = tz.getOffset(System.currentTimeMillis()) / 1000
+            Glide.setLocalZone(tz.id, offset.toLong())
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun updateNotification(phase: Phase) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, buildNotification(phase))
+    }
+
+    private fun buildNotification(phase: Phase): Notification {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, getString(R.string.app_name), NotificationManager.IMPORTANCE_LOW)
+            channel.setShowBadge(false)
             manager.createNotificationChannel(channel)
         }
         val open = PendingIntent.getActivity(
@@ -124,12 +169,29 @@ class GlideVpnService : VpnService() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
-        return builder
+        val text = when (phase) {
+            Phase.ACILIYOR -> getString(R.string.status_opening)
+            Phase.KAPANIYOR -> getString(R.string.status_closing)
+            else -> getString(R.string.notif_active)
+        }
+        builder
             .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.notif_active))
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_status)
             .setContentIntent(open)
             .setOngoing(true)
-            .build()
+        if (phase == Phase.ACIK) {
+            val stopIntent = PendingIntent.getService(
+                this, 1,
+                Intent(this, GlideVpnService::class.java).setAction(ACTION_STOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(
+                Notification.Action.Builder(
+                    null, getString(R.string.notif_stop), stopIntent
+                ).build()
+            )
+        }
+        return builder.build()
     }
 }

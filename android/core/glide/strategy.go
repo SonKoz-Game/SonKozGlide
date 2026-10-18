@@ -9,6 +9,7 @@ type desyncMode int
 const (
 	modeSplit desyncMode = iota
 	modeFakeTTL
+	modeFakeSplit
 )
 
 type strategy struct {
@@ -20,12 +21,16 @@ type strategy struct {
 }
 
 var strategyCatalog = []strategy{
-	{ID: "ttl-split", Mode: modeFakeTTL, TTL: 5, SplitPos: 1, SplitSNI: true},
+	{ID: "ttl-split", Mode: modeFakeSplit, TTL: 5, SplitPos: 1, SplitSNI: true},
+	{ID: "ttl-split-low", Mode: modeFakeSplit, TTL: 3, SplitPos: 1, SplitSNI: true},
+	{ID: "ttl-split-mid", Mode: modeFakeSplit, TTL: 4, SplitPos: 1, SplitSNI: true},
+	{ID: "ttl-split-high", Mode: modeFakeSplit, TTL: 6, SplitPos: 1, SplitSNI: true},
 	{ID: "ttl-fake", Mode: modeFakeTTL, TTL: 5, SplitSNI: true},
-	{ID: "ttl-low", Mode: modeFakeTTL, TTL: 3, SplitSNI: true},
-	{ID: "ttl-high", Mode: modeFakeTTL, TTL: 8, SplitSNI: true},
+	{ID: "ttl-fake-low", Mode: modeFakeTTL, TTL: 2, SplitSNI: true},
+	{ID: "ttl-fake-high", Mode: modeFakeTTL, TTL: 7, SplitSNI: true},
 	{ID: "split-sni", Mode: modeSplit, SplitPos: 1, SplitSNI: true},
 	{ID: "split-pos", Mode: modeSplit, SplitPos: 2},
+	{ID: "split-pos3", Mode: modeSplit, SplitPos: 3},
 }
 
 func strategyByID(id string) (strategy, bool) {

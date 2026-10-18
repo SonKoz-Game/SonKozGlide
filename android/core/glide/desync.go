@@ -25,7 +25,9 @@ func writeDesynced(remote net.Conn, first []byte, s strategy) error {
 	case modeSplit:
 		return writeSplit(remote, first, pos)
 	case modeFakeTTL:
-		return writeFake(remote, first, pos, s)
+		return writeFake(remote, first, pos, s, false)
+	case modeFakeSplit:
+		return writeFake(remote, first, pos, s, true)
 	default:
 		_, err := remote.Write(first)
 		return err
@@ -40,7 +42,7 @@ func writeSplit(remote net.Conn, first []byte, pos int) error {
 	return err
 }
 
-func writeFake(remote net.Conn, first []byte, pos int, s strategy) error {
+func writeFake(remote net.Conn, first []byte, pos int, s strategy, split bool) error {
 	tcp, ok := remote.(*net.TCPConn)
 	if !ok {
 		return errors.New("tcp degil")
@@ -71,6 +73,9 @@ func writeFake(remote net.Conn, first []byte, pos int, s strategy) error {
 	}
 	if ctrlErr != nil {
 		return ctrlErr
+	}
+	if split {
+		return writeSplit(tcp, first, pos)
 	}
 	_, werr := tcp.Write(first)
 	return werr

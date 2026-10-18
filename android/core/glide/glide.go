@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -47,10 +48,26 @@ func defaultOptions() *Options {
 	}
 }
 
+func SetLocalZone(name string, offsetSeconds int) {
+	if name == "" {
+		name = "local"
+	}
+	time.Local = time.FixedZone(name, offsetSeconds)
+}
+
 func Start(fd int, opts *Options, logger Logger) (*Tunnel, error) {
 	if fd <= 0 {
 		return nil, errors.New("gecersiz tun")
 	}
+	t, err := start(fd, opts, logger)
+	if err != nil {
+		syscall.Close(fd)
+		return nil, err
+	}
+	return t, nil
+}
+
+func start(fd int, opts *Options, logger Logger) (*Tunnel, error) {
 	base := defaultOptions()
 	if opts != nil {
 		mergeOptions(base, opts)

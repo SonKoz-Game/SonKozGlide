@@ -14,4 +14,9 @@
     <string name="status_error">Bağlantı kurulamadı</string>
     <string name="method_prefix">Yöntem:</string>
     <string name="notif_active">Bağlantı açık</string>
+    <string name="notif_stop">Durdur</string>
+    <string name="tile_label">SonKoz Glide</string>
+    <string name="uptime_prefix">Süre:</string>
+    <string name="hint_tap_connect">Bağlanmak için dokun</string>
+    <string name="hint_tap_disconnect">Kesmek için dokun</string>
 </resources>

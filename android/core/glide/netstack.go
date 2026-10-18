@@ -3,6 +3,8 @@ package glide
 import (
 	"errors"
 	"net/netip"
+	"syscall"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -20,10 +22,12 @@ const (
 	nicID          = 1
 	tcpRcvWnd      = 0
 	tcpMaxInFlight = 512
+	stackStopWait  = 1500 * time.Millisecond
 )
 
 type tunStack struct {
 	stack *stack.Stack
+	fd    int
 }
 
 func startTunStack(fd int, opts *Options, t *Tunnel) (*tunStack, error) {
@@ -40,6 +44,7 @@ func startTunStack(fd int, opts *Options, t *Tunnel) (*tunStack, error) {
 		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol},
 	})
 	if tcpErr := s.CreateNIC(nicID, ep); tcpErr != nil {
+		s.Close()
 		return nil, errors.New(tcpErr.String())
 	}
 	s.SetPromiscuousMode(nicID, true)
@@ -59,11 +64,20 @@ func startTunStack(fd int, opts *Options, t *Tunnel) (*tunStack, error) {
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, udpFwd.HandlePacket)
 
-	return &tunStack{stack: s}, nil
+	return &tunStack{stack: s, fd: fd}, nil
 }
 
 func (ts *tunStack) close() {
-	ts.stack.Close()
+	done := make(chan struct{})
+	go func() {
+		ts.stack.Destroy()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(stackStopWait):
+	}
+	syscall.Close(ts.fd)
 }
 
 func (t *Tunnel) isDNS(addr netip.Addr) bool {
